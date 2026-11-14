@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_service_label">Free My TV: botão Home</string>
+    <string name="home_service_description">Abre o Free My TV quando você aperta o botão Home do controle. Só verifica qual app está na frente e nunca lê o que aparece na tela.</string>
+</resources>
