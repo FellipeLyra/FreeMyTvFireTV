@@ -10,7 +10,7 @@ export type Dim =
 
 export type Anchor = 'start' | 'end' | 'center' | 'stretch' | 'scale';
 export type Constraint =
-    | { anchor: 'start' | 'end' | 'center'; offset: number; size: number }
+    | { anchor: 'start' | 'end' | 'center'; offset: number; size?: number } // no size = hug content
     | { anchor: 'stretch'; start: number; end: number }
     | { anchor: 'scale'; start: number; size: number };
 

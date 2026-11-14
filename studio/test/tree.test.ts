@@ -100,8 +100,8 @@ describe('grouping', () => {
         const stack = T.find(r, id)!.node;
         expect(stack.children!.map((c) => c.id)).toEqual(['y', 'x']);
         expect(stack.children!.every((c) => !c.constraints)).toBe(true);
-        expect(stack.constraints!.h).toEqual({ anchor: 'start', offset: 100, size: 500 });
-        expect(stack.constraints!.v).toEqual({ anchor: 'start', offset: 50, size: 50 });
+        expect(stack.constraints!.h).toEqual({ anchor: 'start', offset: 100 });
+        expect(stack.constraints!.v).toEqual({ anchor: 'start', offset: 50 });
         expect(E.validate({ schemaVersion: 1, id: 't', name: 't', pages: { home: { root: r } } }, { studio: true }).errors).toEqual([]);
     });
     it('unwrap puts children back with their positions', () => {
@@ -202,5 +202,41 @@ describe('auto layout on the TV screen (reported case)', () => {
         expect(screen.children!.map((c) => c.id)).toEqual(['customize', 'apps']);
         expect(T.find(screen, 'apps')!.node.size!.width).toEqual({ mode: 'fill' });
         expect(T.find(screen, 'customize')!.node.size!.width).toEqual({ mode: 'fixed', value: 190 });
+    });
+});
+
+describe('absolute sizing: Fixed / Hug / Fill / Percent', () => {
+    const rect = { x: 100, y: 50, w: 400, h: 120 };
+    const P = { w: 1920, h: 1080 };
+    it('switches modes without moving the element', () => {
+        const n: LayoutNode = { id: 's', type: 'stack', constraints: { h: { anchor: 'start', offset: 100, size: 400 }, v: { anchor: 'start', offset: 50, size: 120 } } };
+        T.setAbsoluteSize(n, 'h', 'fill', rect, P);
+        expect(n.constraints!.h).toEqual({ anchor: 'stretch', start: 100, end: 1420 });
+        T.setAbsoluteSize(n, 'h', 'percent', rect, P);
+        expect(n.constraints!.h.anchor).toBe('scale');
+        T.setAbsoluteSize(n, 'v', 'hug', rect, P);
+        expect(n.constraints!.v).toEqual({ anchor: 'start', offset: 50 });
+        expect(T.sizeModeOf(n.constraints!.v)).toBe('hug');
+        T.setAbsoluteSize(n, 'v', 'fixed', rect, P);
+        expect(n.constraints!.v).toEqual({ anchor: 'start', offset: 50, size: 120 });
+    });
+    it('moving keeps hug; resizing by hand makes it fixed', () => {
+        const n: LayoutNode = { id: 's', type: 'stack', constraints: { h: { anchor: 'end', offset: 40 }, v: { anchor: 'start', offset: 50 } } };
+        T.placeAbsolute(n, { x: 1000, y: 80, w: 300, h: 90 }, P);
+        expect(n.constraints).toEqual({ h: { anchor: 'end', offset: 620 }, v: { anchor: 'start', offset: 80 } });
+        T.placeAbsolute(n, { x: 1000, y: 80, w: 350, h: 90 }, P, true);
+        expect(n.constraints!.h).toEqual({ anchor: 'end', offset: 570, size: 350 });
+    });
+    it('hug is valid in the engine and becomes content-sized CSS', () => {
+        const css = (E as unknown as { nodeCss: unknown }).nodeCss as (n: LayoutNode, p: LayoutNode, t: unknown, o: unknown) => Record<string, string>;
+        const frame = { id: 'f', type: 'frame' } as LayoutNode;
+        const t = E.mergeTokens({});
+        const start = css({ id: 'a', type: 'stack', constraints: { h: { anchor: 'start', offset: 10 }, v: { anchor: 'start', offset: 5 } } }, frame, t, {});
+        expect(start.left).toBe('10px');
+        expect(start.width).toBeUndefined();
+        const center = css({ id: 'b', type: 'stack', constraints: { h: { anchor: 'center', offset: 0 }, v: { anchor: 'start', offset: 5 } } }, frame, t, {});
+        expect([center['margin-left'], center['margin-right'], center.width]).toEqual(['auto', 'auto', 'max-content']);
+        const v = E.validate({ schemaVersion: 1, id: 't', name: 't', pages: { home: { root: { id: 'r', type: 'frame', children: [{ id: 'apps', type: 'launcher.app-shelf', constraints: { h: { anchor: 'center', offset: 0 }, v: { anchor: 'end', offset: 40 } } }] } } } });
+        expect(v.errors).toEqual([]);
     });
 });

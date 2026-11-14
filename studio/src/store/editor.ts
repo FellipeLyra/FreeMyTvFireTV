@@ -85,6 +85,7 @@ export interface EditorState {
     moveAbsolute(ids: string[], dx: number, dy: number): void;
     setNodeRect(id: string, rect: Rect): void;
     setAnchor(id: string, axis: 'h' | 'v', anchor: Anchor): void;
+    setAbsoluteSize(id: string, axis: 'h' | 'v', mode: T.SizeMode): void;
     setPositionMode(id: string, mode: 'flow' | 'absolute'): void;
     wrapSelection(direction: 'horizontal' | 'vertical'): void;
     unwrapSelection(): void;
@@ -409,7 +410,7 @@ export const useEditor = create<EditorState>((set, get) => {
                 if (!pr) return;
                 const rel = { x: rect.x - pr.x, y: rect.y - pr.y, w: Math.max(1, rect.w), h: Math.max(1, rect.h) };
                 if (T.isAbsolute(loc.node, loc.parent)) {
-                    T.placeAbsolute(loc.node, rel, { w: pr.w, h: pr.h });
+                    T.placeAbsolute(loc.node, rel, { w: pr.w, h: pr.h }, true);
                 } else {
                     const old = s.rects[id];
                     const size = { ...(loc.node.size || {}) };
@@ -425,6 +426,13 @@ export const useEditor = create<EditorState>((set, get) => {
             const rr = relRect(s.rects, s.project, s.page, id);
             if (!rr) return;
             s.updateNode(id, (n) => T.setAnchor(n as LayoutNode, axis, anchor, rr.rect, rr.parentSize));
+        },
+
+        setAbsoluteSize(id, axis, mode) {
+            const s = get();
+            const rr = relRect(s.rects, s.project, s.page, id);
+            if (!rr) return;
+            s.updateNode(id, (n) => T.setAbsoluteSize(n as LayoutNode, axis, mode, rr.rect, rr.parentSize));
         },
 
         setPositionMode(id, mode) {
@@ -638,7 +646,7 @@ export const useEditor = create<EditorState>((set, get) => {
                 // Size from the canvas measure, or from the constraints when not measured yet.
                 const pr = s.rects[parent.id] || { w: 1920, h: 1080 };
                 const r = s.rects[node.id] || (node.constraints
-                    ? { w: T.axisRange(node.constraints.h, pr.w)[1], h: T.axisRange(node.constraints.v, pr.h)[1] }
+                    ? { w: T.axisRange(node.constraints.h, pr.w, 200)[1], h: T.axisRange(node.constraints.v, pr.h, 100)[1] }
                     : null);
                 delete copy.constraints;
                 delete copy.position;

@@ -114,32 +114,72 @@ export function axisConstraint(anchor: Anchor, pos: number, size: number, parent
 }
 
 /** Position [pos, size] that a constraint produces in a parent of `parentSize`. */
-export function axisRange(c: Constraint, parentSize: number): [number, number] {
+export function axisRange(c: Constraint, parentSize: number, measured = 0): [number, number] {
     switch (c.anchor) {
-        case 'start': return [c.offset, c.size];
-        case 'end': return [parentSize - c.offset - c.size, c.size];
-        case 'center': return [parentSize / 2 + c.offset - c.size / 2, c.size];
+        case 'start': return [c.offset, c.size ?? measured];
+        case 'end': return [parentSize - c.offset - (c.size ?? measured), c.size ?? measured];
+        case 'center': return [parentSize / 2 + c.offset - (c.size ?? measured) / 2, c.size ?? measured];
         case 'stretch': return [c.start, parentSize - c.start - c.end];
         case 'scale': return [(c.start / 100) * parentSize, (c.size / 100) * parentSize];
     }
 }
 
 /** Set a node's constraints so it occupies `rect` (relative to its parent), keeping its anchors. */
-export function placeAbsolute(node: LayoutNode, rect: Rect, parentSize: { w: number; h: number }) {
-    const h = node.constraints?.h.anchor || 'start';
-    const v = node.constraints?.v.anchor || 'start';
-    node.constraints = {
+export function placeAbsolute(node: LayoutNode, rect: Rect, parentSize: { w: number; h: number }, resized = false) {
+    const old = node.constraints;
+    const h = old?.h.anchor || 'start';
+    const v = old?.v.anchor || 'start';
+    const next = {
         h: axisConstraint(h, rect.x, Math.max(1, rect.w), parentSize.w),
         v: axisConstraint(v, rect.y, Math.max(1, rect.h), parentSize.h),
     };
+    // Moving keeps "hug" (no size); resizing by hand turns it into a fixed size.
+    if (!resized) {
+        if (old && isHug(old.h) && 'offset' in next.h) delete next.h.size;
+        if (old && isHug(old.v) && 'offset' in next.v) delete next.v.size;
+    }
+    node.constraints = next;
+}
+
+export function isHug(c: Constraint): boolean {
+    return (c.anchor === 'start' || c.anchor === 'end' || c.anchor === 'center') && c.size === undefined;
+}
+
+export type SizeMode = 'fixed' | 'hug' | 'fill' | 'percent';
+
+export function sizeModeOf(c: Constraint): SizeMode {
+    if (c.anchor === 'stretch') return 'fill';
+    if (c.anchor === 'scale') return 'percent';
+    return c.size === undefined ? 'hug' : 'fixed';
+}
+
+/** Change how an absolute element is sized on one axis, keeping it where it is. */
+export function setAbsoluteSize(node: LayoutNode, axis: 'h' | 'v', mode: SizeMode, rect: Rect, parentSize: { w: number; h: number }) {
+    if (!node.constraints) placeAbsolute(node, rect, parentSize, true);
+    const c = node.constraints!;
+    const pos = axis === 'h' ? rect.x : rect.y;
+    const size = axis === 'h' ? rect.w : rect.h;
+    const total = axis === 'h' ? parentSize.w : parentSize.h;
+    const cur = c[axis];
+    const pinned: Anchor = cur.anchor === 'end' || cur.anchor === 'center' ? cur.anchor : 'start';
+    let next: Constraint;
+    if (mode === 'fill') next = axisConstraint('stretch', pos, size, total);
+    else if (mode === 'percent') next = axisConstraint('scale', pos, size, total);
+    else {
+        next = axisConstraint(pinned, pos, size, total);
+        if (mode === 'hug' && 'offset' in next) delete next.size;
+    }
+    c[axis] = next;
 }
 
 /** Change an anchor without moving the element. */
 export function setAnchor(node: LayoutNode, axis: 'h' | 'v', anchor: Anchor, rect: Rect, parentSize: { w: number; h: number }) {
     if (!node.constraints) placeAbsolute(node, rect, parentSize);
     const c = node.constraints!;
-    if (axis === 'h') c.h = axisConstraint(anchor, rect.x, rect.w, parentSize.w);
-    else c.v = axisConstraint(anchor, rect.y, rect.h, parentSize.h);
+    const hug = isHug(c[axis]);
+    const next = axis === 'h' ? axisConstraint(anchor, rect.x, rect.w, parentSize.w) : axisConstraint(anchor, rect.y, rect.h, parentSize.h);
+    if (hug && 'offset' in next) delete next.size;
+    c[axis] = next;
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,7 +291,10 @@ export function wrapInStack(root: LayoutNode, ids: string[], direction: 'horizon
             const w = Math.max(...rs.map((r) => r.x + r.w)) - x, h = Math.max(...rs.map((r) => r.y + r.h)) - y;
             if (parent.type !== 'frame') stack.position = 'absolute';
             placeAbsolute(stack, { x, y, w, h }, parentSize);
-            stack.size = { width: { mode: 'hug' }, height: { mode: 'hug' } };
+            // Like design tools: a new group hugs its content.
+            const c = stack.constraints!;
+            if ('offset' in c.h) delete c.h.size;
+            if ('offset' in c.v) delete c.v.size;
         }
     }
     return stack.id;

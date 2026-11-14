@@ -95,9 +95,9 @@ function NodeProperties({ loc }: { loc: T.Located }) {
             {absolute && <AlignBar />}
 
             {!parent && page !== 'home' && <PanelSection page={page} />}
+            {parent && !absolute && <SizeSection node={node} parent={parent} />}
             {def?.container && !styleOnly && <LayoutSection node={node} />}
             {parent && <PositionSection node={node} parent={parent} absolute={absolute} inStack={inStack} />}
-            {parent && !absolute && <SizeSection node={node} parent={parent} />}
             <AppearanceSection node={node} />
             {isText && <TypographySection node={node} />}
             <DataSection node={node} />
@@ -254,6 +254,13 @@ function PanelSection({ page }: { page: string }) {
 
 /* ---------------- Position ---------------- */
 
+const SIZE_MODES: { value: T.SizeMode; label: string }[] = [
+    { value: 'fixed', label: 'Fixo' },
+    { value: 'hug', label: 'Hug (ajustar ao conteúdo)' },
+    { value: 'fill', label: 'Fill (preencher o container)' },
+    { value: 'percent', label: 'Percentual do container' },
+];
+
 const ANCHORS_H: { value: Anchor; label: string }[] = [
     { value: 'start', label: 'Esquerda' }, { value: 'end', label: 'Direita' }, { value: 'center', label: 'Centro' },
     { value: 'stretch', label: 'Esquerda e direita' }, { value: 'scale', label: 'Escala (%)' }];
@@ -287,6 +294,14 @@ function PositionSection({ node, parent, absolute, inStack }: { node: LayoutNode
                         <label><span>Y</span><NumberField value={rr?.rect.y} onChange={(v) => v !== undefined && setRect({ y: v })} /></label>
                         <label><span>L</span><NumberField value={rr?.rect.w} min={1} onChange={(v) => v !== undefined && setRect({ w: v })} /></label>
                         <label><span>A</span><NumberField value={rr?.rect.h} min={1} onChange={(v) => v !== undefined && setRect({ h: v })} /></label>
+                    </div>
+                    <div className="abs-size">
+                        <Row label="Largura">
+                            <Select value={T.sizeModeOf(node.constraints.h)} onChange={(m) => s.setAbsoluteSize(node.id, 'h', m)} options={SIZE_MODES} />
+                        </Row>
+                        <Row label="Altura">
+                            <Select value={T.sizeModeOf(node.constraints.v)} onChange={(m) => s.setAbsoluteSize(node.id, 'v', m)} options={SIZE_MODES} />
+                        </Row>
                     </div>
                     <Row label="Fixar horizontal" hint="Como o elemento acompanha o container quando ele muda de tamanho">
                         <Select value={node.constraints.h.anchor} options={ANCHORS_H} onChange={(v) => s.setAnchor(node.id, 'h', v)} />

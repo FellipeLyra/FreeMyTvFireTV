@@ -385,7 +385,8 @@
         function n(field, lo, hi) {
             if (!(isNum(c[field]) && c[field] >= lo && c[field] <= hi)) r.error(path + '.' + field, 'obrigatório, ' + lo + '…' + hi);
         }
-        if (a === 'start' || a === 'end' || a === 'center') { n('offset', -8000, 8000); n('size', 0, 8000); }
+        // Without `size`, the element hugs its content on that axis.
+        if (a === 'start' || a === 'end' || a === 'center') { n('offset', -8000, 8000); if (c.size !== undefined) n('size', 0, 8000); }
         if (a === 'stretch') { n('start', -8000, 8000); n('end', -8000, 8000); }
         if (a === 'scale') { n('start', -100, 200); n('size', 0, 200); }
     }
@@ -734,9 +735,18 @@
         var startProp = axis === 'h' ? 'left' : 'top';
         var endProp = axis === 'h' ? 'right' : 'bottom';
         var sizeProp = axis === 'h' ? 'width' : 'height';
-        if (c.anchor === 'start') { out[startProp] = px(c.offset); out[sizeProp] = px(c.size); }
-        else if (c.anchor === 'end') { out[endProp] = px(c.offset); out[sizeProp] = px(c.size); }
-        else if (c.anchor === 'center') { out[startProp] = 'calc(50% - ' + px(c.size / 2) + ' + ' + px(c.offset) + ')'; out[sizeProp] = px(c.size); }
+        var hug = !isNum(c.size);
+        if (c.anchor === 'start') { out[startProp] = px(c.offset); if (!hug) out[sizeProp] = px(c.size); }
+        else if (c.anchor === 'end') { out[endProp] = px(c.offset); if (!hug) out[sizeProp] = px(c.size); }
+        else if (c.anchor === 'center' && !hug) { out[startProp] = 'calc(50% - ' + px(c.size / 2) + ' + ' + px(c.offset) + ')'; out[sizeProp] = px(c.size); }
+        else if (c.anchor === 'center') {
+            // Centred and hugging: both edges pinned, auto margins centre the content-sized box.
+            out[startProp] = px(c.offset);
+            out[endProp] = px(-c.offset);
+            out['margin-' + startProp] = 'auto';
+            out['margin-' + endProp] = 'auto';
+            out[sizeProp] = 'max-content';
+        }
         else if (c.anchor === 'stretch') { out[startProp] = px(c.start); out[endProp] = px(c.end); }
         else if (c.anchor === 'scale') { out[startProp] = c.start + '%'; out[sizeProp] = c.size + '%'; }
     }
