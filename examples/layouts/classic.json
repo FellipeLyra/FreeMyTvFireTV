@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "classic",
+  "name": "Clássico",
+  "generator": "hand-written example",
+  "pages": {
+    "home": {
+      "root": {
+        "id": "root",
+        "type": "stack",
+        "name": "Tela",
+        "layout": { "direction": "vertical", "justify": "space-between", "align": "stretch", "padding": [34, 54, 34, 54] },
+        "children": [
+          {
+            "id": "header",
+            "type": "stack",
+            "name": "Cabeçalho",
+            "layout": { "direction": "horizontal", "align": "center", "gap": 18 },
+            "children": [
+              { "id": "brand", "type": "launcher.brand" },
+              { "id": "header-space", "type": "spacer" },
+              { "id": "customize", "type": "launcher.settings-button" },
+              { "id": "weather", "type": "launcher.weather" },
+              {
+                "id": "clock-group",
+                "type": "stack",
+                "layout": { "direction": "horizontal", "align": "baseline", "gap": 14 },
+                "children": [
+                  { "id": "date", "type": "launcher.date" },
+                  { "id": "clock", "type": "launcher.clock" }
+                ]
+              }
+            ]
+          },
+          { "id": "hero", "type": "launcher.hero" },
+          { "id": "apps", "type": "launcher.app-shelf", "focus": { "initial": true } },
+          { "id": "trending", "type": "launcher.trending" }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "id": "cinema",
+  "name": "Cinema",
+  "generator": "hand-written example",
+  "tokens": {
+    "colors": { "accent": "#64d2ff", "surface": "rgba(255,255,255,0.10)", "focus": "#64d2ff" },
+    "fontFamily": "system"
+  },
+  "assets": [
+    { "id": "aurora", "file": "aurora.jpg" }
+  ],
+  "pages": {
+    "home": {
+      "root": {
+        "id": "root",
+        "type": "frame",
+        "name": "Tela",
+        "layout": { "clip": true },
+        "style": { "background": { "type": "image", "asset": "aurora", "fit": "cover" } },
+        "children": [
+          {
+            "id": "shade",
+            "type": "frame",
+            "name": "Escurecer embaixo",
+            "constraints": { "h": { "anchor": "stretch", "start": 0, "end": 0 }, "v": { "anchor": "stretch", "start": 0, "end": 0 } },
+            "style": { "background": { "type": "linear", "angle": 180, "stops": [
+              { "color": "rgba(0,0,0,0)", "pos": 30 }, { "color": "rgba(4,7,14,0.92)", "pos": 72 } ] } }
+          },
+          {
+            "id": "topbar",
+            "type": "stack",
+            "name": "Barra superior",
+            "constraints": { "h": { "anchor": "stretch", "start": 64, "end": 64 }, "v": { "anchor": "start", "offset": 40, "size": 80 } },
+            "layout": { "direction": "horizontal", "align": "center", "gap": 20 },
+            "children": [
+              { "id": "brand", "type": "launcher.brand" },
+              { "id": "topbar-space", "type": "spacer" },
+              { "id": "weather", "type": "launcher.weather" },
+              { "id": "customize", "type": "launcher.settings-button" }
+            ]
+          },
+          {
+            "id": "big-clock",
+            "type": "clock-text",
+            "name": "Relógio grande",
+            "constraints": { "h": { "anchor": "start", "offset": 64, "size": 900 }, "v": { "anchor": "start", "offset": 150, "size": 170 } },
+            "text": { "size": 150, "weight": 200, "letterSpacing": -4, "color": "#ffffff" },
+            "animation": { "enter": { "preset": "slide-up", "duration": 700, "easing": "smooth" } }
+          },
+          {
+            "id": "date",
+            "type": "launcher.date",
+            "constraints": { "h": { "anchor": "start", "offset": 72, "size": 700 }, "v": { "anchor": "start", "offset": 330, "size": 44 } },
+            "animation": { "enter": { "preset": "fade", "duration": 700, "delay": 150 } }
+          },
+          {
+            "id": "room",
+            "type": "text",
+            "name": "Nome da sala",
+            "constraints": { "h": { "anchor": "start", "offset": 72, "size": 700 }, "v": { "anchor": "start", "offset": 120, "size": 30 } },
+            "props": { "text": "Sala de estar" },
+            "text": { "size": 20, "weight": 700, "letterSpacing": 4, "transform": "uppercase", "color": "$colors.accent" }
+          },
+          {
+            "id": "shortcuts",
+            "type": "stack",
+            "name": "Atalhos",
+            "constraints": { "h": { "anchor": "end", "offset": 64, "size": 520 }, "v": { "anchor": "start", "offset": 210, "size": 72 } },
+            "layout": { "direction": "horizontal", "justify": "end", "align": "center", "gap": 16 },
+            "children": [
+              { "id": "btn-weather", "type": "button", "props": { "label": "☀ Clima", "action": { "type": "open-weather" } },
+                "text": { "size": 24, "weight": 600 }, "animation": { "enter": { "preset": "slide-left", "duration": 500, "delay": 200 }, "focus": { "scale": 1.08 } } },
+              { "id": "btn-settings", "type": "button", "props": { "label": "⚙ Ajustes", "action": { "type": "fire-settings" } },
+                "text": { "size": 24, "weight": 600 }, "animation": { "enter": { "preset": "slide-left", "duration": 500, "delay": 300 }, "focus": { "scale": 1.08 } } }
+            ]
+          },
+          {
+            "id": "bottom",
+            "type": "stack",
+            "name": "Conteúdo",
+            "constraints": { "h": { "anchor": "stretch", "start": 54, "end": 54 }, "v": { "anchor": "end", "offset": 30, "size": 620 } },
+            "layout": { "direction": "vertical", "justify": "end", "align": "stretch", "gap": 26 },
+            "children": [
+              { "id": "apps", "type": "launcher.app-shelf", "focus": { "initial": true },
+                "animation": { "enter": { "preset": "slide-up", "duration": 600, "delay": 100 } } },
+              { "id": "trending", "type": "launcher.trending",
+                "animation": { "enter": { "preset": "slide-up", "duration": 600, "delay": 250 } } }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

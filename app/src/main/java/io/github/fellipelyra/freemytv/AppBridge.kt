@@ -24,10 +24,40 @@ import java.util.concurrent.Executors
  * asynchronously through `window.__fmtvResolve(id, result)` (see firetv-bridge.js).
  * Result objects follow the webOS Luna shape: `returnValue` plus `errorText`.
  */
-class AppBridge(private val activity: Activity, private val webView: WebView) {
+class AppBridge(
+    private val activity: Activity,
+    private val webView: WebView,
+    private val layouts: LayoutStore,
+) {
 
     private val pm: PackageManager = activity.packageManager
     private val worker = Executors.newSingleThreadExecutor()
+
+    // ---- Published layouts (see fmtv/runtime.js and LayoutStore) ----
+
+    /** JSON text of the layout to show, or "" for the built-in screen. Called once per page load. */
+    @JavascriptInterface
+    fun getLayoutJson(): String = layouts.activeLayoutJson() ?: ""
+
+    @JavascriptInterface
+    fun getLayoutStatus(): String = layouts.status().toString()
+
+    /** The page painted the layout: it becomes the rollback target for the next one. */
+    @JavascriptInterface
+    fun layoutRendered(id: String) = layouts.confirmRendered(id)
+
+    /** The page could not validate or render the layout: roll back and reload. */
+    @JavascriptInterface
+    fun layoutFailed(id: String, reason: String) {
+        layouts.renderFailed(id, reason)
+        webView.post { webView.reload() }
+    }
+
+    /** "Layout padrão" button in Customize: back to the original screen (the page reloads itself). */
+    @JavascriptInterface
+    fun resetLayout() {
+        layouts.reset()
+    }
 
     @JavascriptInterface
     fun listLaunchPoints(callId: Int) {

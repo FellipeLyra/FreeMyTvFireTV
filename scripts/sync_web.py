@@ -132,15 +132,21 @@ def main():
         for line in html.split("\n")
     )
 
-    if WEB_OUT.exists():
-        bridge = (WEB_OUT / "firetv-bridge.js").read_bytes()
-        shutil.rmtree(WEB_OUT)
-    else:
-        sys.exit("missing app/src/main/assets/web/firetv-bridge.js")
-    (WEB_OUT / "assets").mkdir(parents=True)
-    (WEB_OUT / "firetv-bridge.js").write_bytes(bridge)
+    # Layout runtime (this repo's own code in web/fmtv/): loaded after the page's
+    # script, so it can reuse the page's widgets and functions.
+    html = patch(html, "</body>",
+                 '    <script src="fmtv/engine.js"></script>\n    <script src="fmtv/runtime.js"></script>\n</body>')
+
+    # Only the files that come from upstream are replaced. firetv-bridge.js and
+    # fmtv/ (the layout engine and runtime) belong to this repository and are kept.
+    for own in ("firetv-bridge.js", "fmtv/engine.js", "fmtv/runtime.js"):
+        if not (WEB_OUT / own).is_file():
+            sys.exit(f"missing app/src/main/assets/web/{own}")
     (WEB_OUT / "index.html").write_text(html, encoding="utf-8", newline="\n")
-    shutil.copytree(upstream / "assets" / "brands", WEB_OUT / "assets" / "brands")
+    brands = WEB_OUT / "assets" / "brands"
+    if brands.exists():
+        shutil.rmtree(brands)
+    shutil.copytree(upstream / "assets" / "brands", brands)
     print(f"web UI written to {WEB_OUT}")
 
 
