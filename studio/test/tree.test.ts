@@ -139,3 +139,68 @@ describe('creating and cloning', () => {
         expect(T.cloneWithNewIds({ id: 'z', type: 'launcher.clock' }, new Set())).toBeNull();
     });
 });
+
+describe('auto layout on/off', () => {
+    it('adding auto layout keeps the look: order, gap and padding come from positions', () => {
+        const f: LayoutNode = {
+            id: 'f', type: 'frame', children: [
+                { id: 'b', type: 'text', constraints: { h: { anchor: 'start', offset: 240, size: 100 }, v: { anchor: 'start', offset: 20, size: 40 } } },
+                { id: 'a', type: 'text', constraints: { h: { anchor: 'start', offset: 20, size: 200 }, v: { anchor: 'start', offset: 20, size: 40 } } },
+            ],
+        };
+        T.addAutoLayout(f, { a: { x: 20, y: 20, w: 200, h: 40 }, b: { x: 240, y: 20, w: 100, h: 40 } }, { w: 360, h: 80 });
+        expect(f.type).toBe('stack');
+        expect(f.layout).toMatchObject({ direction: 'horizontal', gap: 20, padding: 20 });
+        expect(f.children!.map((c) => c.id)).toEqual(['a', 'b']);
+        expect(f.children!.every((c) => !c.constraints)).toBe(true);
+        expect(f.children![0].size).toEqual({ width: { mode: 'fixed', value: 200 }, height: { mode: 'fixed', value: 40 } });
+    });
+    it('vertical arrangements become vertical stacks with per-side padding when uneven', () => {
+        const f: LayoutNode = {
+            id: 'f', type: 'frame', children: [
+                { id: 'a', type: 'text', constraints: { h: { anchor: 'start', offset: 10, size: 100 }, v: { anchor: 'start', offset: 30, size: 40 } } },
+                { id: 'b', type: 'text', constraints: { h: { anchor: 'start', offset: 10, size: 100 }, v: { anchor: 'start', offset: 90, size: 40 } } },
+            ],
+        };
+        T.addAutoLayout(f, { a: { x: 10, y: 30, w: 100, h: 40 }, b: { x: 10, y: 90, w: 100, h: 40 } }, { w: 200, h: 200 });
+        expect(f.layout).toMatchObject({ direction: 'vertical', gap: 20, padding: [30, 90, 70, 10] });
+    });
+    it('removing auto layout leaves every child at its place', () => {
+        const r = sample();
+        const row = T.find(r, 'row')!.node;
+        T.removeAutoLayout(row, { a: { x: 0, y: 0, w: 30, h: 40 }, b: { x: 40, y: 0, w: 30, h: 40 }, c: { x: 80, y: 0, w: 60, h: 40 } }, { w: 800, h: 100 });
+        expect(row.type).toBe('frame');
+        expect(T.find(r, 'c')!.node.constraints).toEqual({ h: { anchor: 'start', offset: 80, size: 60 }, v: { anchor: 'start', offset: 0, size: 40 } });
+        expect(E.validate({ schemaVersion: 1, id: 't', name: 't', pages: { home: { root: r } } }, { studio: true }).errors).toEqual([]);
+    });
+    it('guesses the direction from the spread', () => {
+        expect(T.guessDirection([{ x: 0, y: 0, w: 10, h: 10 }, { x: 100, y: 5, w: 10, h: 10 }])).toBe('horizontal');
+        expect(T.guessDirection([{ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 100, w: 10, h: 10 }])).toBe('vertical');
+    });
+});
+
+describe('new components', () => {
+    it('content blocks and icons are created valid', () => {
+        for (const type of ['icon', 'content-row', 'content-grid', 'banner', 'weather-full']) {
+            const n = T.createNode(type, new Set());
+            const v = E.validate({ schemaVersion: 1, id: 't', name: 't', pages: { home: { root: { id: 'root', type: 'stack', children: [{ id: 'apps', type: 'launcher.app-shelf' }, n] } } } });
+            expect(v.errors, type).toEqual([]);
+        }
+    });
+});
+
+describe('auto layout on the TV screen (reported case)', () => {
+    it('shelf at the bottom + button at the top -> vertical stack, stretched shelf becomes Fill', () => {
+        const screen: LayoutNode = {
+            id: 'root', type: 'frame', children: [
+                { id: 'apps', type: 'launcher.app-shelf', constraints: { h: { anchor: 'stretch', start: 54, end: 54 }, v: { anchor: 'end', offset: 260, size: 300 } } },
+                { id: 'customize', type: 'launcher.settings-button', constraints: { h: { anchor: 'end', offset: 54, size: 190 }, v: { anchor: 'start', offset: 40, size: 50 } } },
+            ],
+        };
+        T.addAutoLayout(screen, { apps: { x: 54, y: 520, w: 1812, h: 300 }, customize: { x: 1676, y: 40, w: 190, h: 50 } }, { w: 1920, h: 1080 });
+        expect(screen.layout!.direction).toBe('vertical');
+        expect(screen.children!.map((c) => c.id)).toEqual(['customize', 'apps']);
+        expect(T.find(screen, 'apps')!.node.size!.width).toEqual({ mode: 'fill' });
+        expect(T.find(screen, 'customize')!.node.size!.width).toEqual({ mode: 'fixed', value: 190 });
+    });
+});

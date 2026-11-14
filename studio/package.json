@@ -6,7 +6,7 @@
   "description": "Free My TV Studio: visual layout editor for the Free My TV launcher",
   "scripts": {
     "runtime": "node scripts/copy-runtime.mjs",
-    "dev": "npm run runtime && vite",
+    "dev": "vite",
     "build": "npm run runtime && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.4",
+    "@types/node": "^22.10.2",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.4",

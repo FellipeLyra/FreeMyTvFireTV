@@ -1821,15 +1821,21 @@
         }
 
         // --- Live Trending Picks (TMDB + Live TVMaze Zero-Key Feed), split by Movies/Shows tab ---
-        function fetchTrendingPicks() {
+        function fetchTrendingPicks(forTab, sink) {
             var badge = document.getElementById('picksSourceBadge');
-            var tab = state.picksTab;
+            var tab = forTab || state.picksTab;
             var tmdbMediaPath = tab === 'shows' ? 'tv' : 'movie';
+            function isCurrent() { return !!sink || tab === state.picksTab; }
+            function deliver(items, source) {
+                if (window.FMTVData) window.FMTVData.picks(tab, items, source);
+                if (sink) { sink(items, source); return; }
+                badge.textContent = source;
+                renderPicks(items);
+            }
 
             function showCurated() {
-                if (tab !== state.picksTab) return;
-                badge.textContent = t('Curated Picks');
-                renderPicks(tab === 'shows' ? FALLBACK_SHOWS : FALLBACK_MOVIES);
+                if (!isCurrent()) return;
+                deliver(tab === 'shows' ? FALLBACK_SHOWS : FALLBACK_MOVIES, t('Curated Picks'));
             }
 
             if (typeof fetch !== 'function') {
@@ -1849,7 +1855,7 @@
                 tmdbPromise = fetch(url, { headers: headers })
                     .then(function(res) { return res.json(); })
                     .then(function(data) {
-                        if (data.results && data.results.length >= 4 && tab === state.picksTab) {
+                        if (data.results && data.results.length >= 4 && isCurrent()) {
                             var results = data.results.slice(0, 4);
                             var items = results.map(function(item) {
                                 var title = item.title || item.name || 'Trending';
@@ -1864,8 +1870,7 @@
                                     color: '#0a84ff'
                                 };
                             });
-                            badge.textContent = t('TMDB Live');
-                            renderPicks(items);
+                            deliver(items, t('TMDB Live'));
 
                             // TMDB can't say which streaming service carries a title, so cards open its
                             // YouTube trailer directly when one exists (contentTarget deep link), and
@@ -1881,7 +1886,7 @@
                                     })
                                     .catch(function() { return ''; });
                             })).then(function(keys) {
-                                if (tab !== state.picksTab) return;
+                                if (!isCurrent()) return;
                                 var linked = false;
                                 keys.forEach(function(videoKey, i) {
                                     var target = 'https://www.youtube.com/tv?v=' + videoKey;
@@ -1892,7 +1897,7 @@
                                         linked = true;
                                     }
                                 });
-                                if (linked) renderPicks(items);
+                                if (linked) deliver(items, t('TMDB Live'));
                             });
                             return true;
                         }
@@ -1913,7 +1918,7 @@
                         return fetch('https://api.tvmaze.com/shows?page=0')
                             .then(function(res) { return res.json(); })
                             .then(function(shows) {
-                                if (Array.isArray(shows) && shows.length > 0 && tab === state.picksTab) {
+                                if (Array.isArray(shows) && shows.length > 0 && isCurrent()) {
                                     var topShows = shows
                                         .filter(function(s) { return s.rating && s.rating.average >= 8.4 && s.image && s.image.medium; })
                                         .sort(function() { return 0.5 - Math.random(); })
@@ -1933,8 +1938,7 @@
                                             };
                                         });
                                     if (topShows.length === 4) {
-                                        badge.textContent = t('Live Popular Feed');
-                                        renderPicks(topShows);
+                                        deliver(topShows, t('Live Popular Feed'));
                                         return true;
                                     }
                                 }
@@ -2741,6 +2745,7 @@
         }, 150);
     </script>
     <script src="fmtv/engine.js"></script>
+    <script src="fmtv/blocks.js"></script>
     <script src="fmtv/runtime.js"></script>
 </body>
 </html>

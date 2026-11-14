@@ -42,6 +42,7 @@ export function NumberField({ value, onChange, min, max, step = 1, suffix, place
         if (!isFinite(v)) { setText(value === undefined ? '' : String(round(value))); return; }
         if (min !== undefined) v = Math.max(min, v);
         if (max !== undefined) v = Math.min(max, v);
+        setText(String(round(v)));
         onChange(v);
     };
     return (

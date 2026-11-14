@@ -70,8 +70,8 @@ Cada elemento tem `id` (único na tela) e `type`. Os demais campos são opcionai
 
 - **`stack`** (auto layout):
   - `layout.direction`: `horizontal` ou `vertical`.
-  - `gap`: espaço entre os filhos.
-  - `padding`: um número ou `[cima, direita, baixo, esquerda]`.
+  - `gap`: espaço entre os filhos (até 2000 px).
+  - `padding`: um número ou `[cima, direita, baixo, esquerda]` (até 2000 px).
   - `align` (eixo cruzado): `start`, `center`, `end`, `stretch` ou `baseline`.
   - `justify`: `start`, `center`, `end`, `space-between`, `space-around` ou `space-evenly`.
   - `wrap`: quebra de linha.
@@ -103,6 +103,11 @@ Dentro de uma stack, um filho com `"position": "absolute"` sai do fluxo e é pos
 | `divider` | Linha (`props.thickness`, `props.color`) |
 | `button` | Botão navegável (`props.label`, `props.action`) |
 | `clock-text` | Relógio próprio (`props.format`: `auto`, `24h` ou `12h`) |
+| `icon` | Ícone de um conjunto fixo de 22 desenhos (`props.name`, `props.color`, `props.strokeWidth`); não aceita SVG de fora |
+| `content-row` | **Carrossel** navegável (`props.source`: `movies`, `shows`, `apps` ou `favorites`; `cardStyle`: `poster`, `wide` ou `app`; `maxItems`; `showTitles`) |
+| `content-grid` | **Grade** navegável (as mesmas fontes, mais `columns`) |
+| `banner` | **Banner de destaque** com imagem, título, descrição e botão (`source`: `movies` ou `shows`; `rotateSeconds`; `buttonLabel`) |
+| `weather-full` | **Clima completo**: agora, próximas horas, nascer e pôr do sol (`hours`, `showSun`, `opensDrawer`) |
 | `launcher.brand` | Logo do Free My TV |
 | `launcher.settings-button` | Botão Personalizar |
 | `launcher.weather` | Clima resumido (abre o painel de clima) |
@@ -110,6 +115,13 @@ Dentro de uma stack, um filho com `"position": "absolute"` sai do fluxo e é pos
 | `launcher.hero` | Destaque do item em foco (título e descrição) |
 | `launcher.app-shelf` | Prateleira de apps favoritos (com Reordenar) |
 | `launcher.trending` | Filmes e séries em alta (com trailers) |
+
+Os blocos de conteúdo (`content-row`, `content-grid`, `banner`, `weather-full`) usam os **serviços do próprio launcher**, sem dados no layout:
+- filmes e séries vêm da mesma busca da linha "Em alta" (TMDB com a chave do usuário, TVMaze ou a lista curada);
+- os apps vêm do catálogo e da lista do Android;
+- o clima vem do Open-Meteo.
+
+Os cartões navegam pelo controle como os tiles do launcher, e o carrossel rola para manter o item em foco visível.
 
 Os componentes `launcher.*` são os **widgets reais** do launcher. O runtime move o elemento original para dentro do layout, então clima, prateleira, abertura de apps, trailers e traduções continuam funcionando sem nenhuma mudança. Cada um pode aparecer só uma vez. Os que o layout não usa ficam escondidos, mas vivos.
 

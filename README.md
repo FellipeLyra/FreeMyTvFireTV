@@ -129,6 +129,9 @@ O formato completo está em **[docs/layouts.md](docs/layouts.md)**. Os layouts p
 <td width="50%"><img src="docs/screenshots/layout-classic.jpg" alt="Layout clássico"><br><sub><b><code>examples/layouts/classic.json</code>:</b> reproduz a tela original usando stacks.</sub></td>
 <td width="50%"><img src="docs/screenshots/layout-cinema.jpg" alt="Layout cinema"><br><sub><b><code>examples/layouts/cinema.json</code>:</b> imagem de fundo, relógio grande e "Sala de estar" posicionados livremente, botões de atalho e a prateleira e os filmes em alta numa stack embaixo.</sub></td>
 </tr>
+<tr>
+<td colspan="2"><img src="docs/screenshots/layout-streaming.jpg" alt="Layout streaming"><br><sub><b><code>examples/layouts/streaming.json</code>:</b> blocos de conteúdo da Fase 4. Banner com os filmes em alta, clima completo, carrossel de apps e carrossel de séries com dados reais do TVMaze.</sub></td>
+</tr>
 </table>
 
 ### Publicar um layout no Fire TV (ADB)
@@ -173,7 +176,8 @@ Editor para PC, em [`studio/`](studio/), no estilo das ferramentas de design de 
 ![Free My TV Studio](docs/screenshots/studio-editor.jpg)
 
 O que já funciona:
-- stacks com auto layout (aninhadas, gap, padding, alinhamento, preencher ou ajustar) e **posicionamento absoluto** com constraints;
+- **auto layout no estilo do Figma** (grade de alinhamento, espaçamento Auto, Fixo/Hug/Fill, Shift+A) e **posicionamento absoluto** com constraints;
+- blocos de conteúdo com dados reais: **carrossel e grade** de filmes, séries ou apps, **banner de destaque**, **clima completo** e **ícones**, mais blocos prontos e blocos salvos pelo usuário;
 - arrastar com guias inteligentes, alças de redimensionar e reordenação por drag and drop;
 - painel de camadas, biblioteca de componentes, assets e propriedades;
 - tema com tokens, animações, desfazer e refazer;
@@ -368,8 +372,8 @@ O objetivo é um editor visual para PC (no estilo de ferramentas de design de in
 | 1. Auditoria e arquitetura | Mapear telas e widgets; schema v1; contratos entre editor, TV e publicação | ✅ Feito ([docs/layouts.md](docs/layouts.md)) |
 | 2. Runtime e vertical slice | Motor compartilhado, runtime na TV, stacks e posicionamento absoluto, importação segura, rollback, CLI e ADB | ✅ Feito. APK compila e os testes automáticos passam; **falta validar num Fire TV** |
 | 3. Studio desktop | App de PC (Tauri + React + TypeScript): canvas 1920×1080, camadas, propriedades, drag and drop, desfazer/refazer, salvar projeto | ✅ Feito ([studio/](studio/)). 26 testes unitários + 16 verificações ponta a ponta no Chrome |
-| 4. Biblioteca de blocos | Mais componentes (carrossel, grade, banner, ícones, gradientes prontos) | ⏳ Próxima |
-| 5. Todas as telas | Clima, Personalizar, protetor de tela, avisos e modais no runtime | ⏳ (o schema já aceita essas páginas) |
+| 4. Biblioteca de blocos | Carrossel, grade, banner, clima completo, ícones, blocos prontos e blocos do usuário; auto layout no estilo do Figma | ✅ Feito. Os blocos usam os serviços do launcher (TMDB/TVMaze, Open-Meteo, apps do Android) |
+| 5. Todas as telas | Clima, Personalizar, protetor de tela, avisos e modais no runtime | ⏳ Próxima (o schema já aceita essas páginas) |
 | 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime e simulador de controle remoto com a mesma navegação | 🟡 Base pronta: a Prévia e o controle virtual já existem; faltam ordem de foco visual, alertas de acessibilidade e resoluções 720p/4K |
 | 7. Publicação ADB no Studio | Descoberta de aparelhos, envio, rollback e histórico pelo editor (a base já está em `tools/lib/adb.mjs`) | ⏳ |
 | 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | ⏳ |

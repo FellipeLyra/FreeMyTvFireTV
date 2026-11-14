@@ -64,6 +64,18 @@ export const I = {
     DistV: (p: P) => <Svg {...p}><path d="M3 4h18M3 20h18" /><rect x="7" y="9" width="10" height="6" rx="1" /></Svg>,
     Upload: (p: P) => <Svg {...p}><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></Svg>,
     Close: (p: P) => <Svg {...p}><path d="M6 6l12 12M18 6 6 18" /></Svg>,
+    Star: (p: P) => <Svg {...p}><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z" /></Svg>,
+    Row: (p: P) => <Svg {...p}><rect x="2" y="7" width="6" height="10" rx="1.2" /><rect x="9.5" y="7" width="6" height="10" rx="1.2" /><path d="M17 7h4v10h-4" /></Svg>,
+    Banner: (p: P) => <Svg {...p}><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M6 10h7M6 13h4" /><rect x="15" y="8" width="4" height="8" rx="1" /></Svg>,
+    Sun: (p: P) => <Svg {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></Svg>,
+    ArrowDown: (p: P) => <Svg {...p}><path d="M12 4v16M6 14l6 6 6-6" /></Svg>,
+    ArrowRight: (p: P) => <Svg {...p}><path d="M4 12h16M14 6l6 6-6 6" /></Svg>,
+    Wrap: (p: P) => <Svg {...p}><path d="M4 7h13a3 3 0 0 1 0 6H8M11 10l-3 3 3 3M4 18h6" /></Svg>,
+    GapH: (p: P) => <Svg {...p}><path d="M4 4v16M20 4v16M9 12h6" /></Svg>,
+    GapV: (p: P) => <Svg {...p}><path d="M4 4h16M4 20h16M12 9v6" /></Svg>,
+    PadH: (p: P) => <Svg {...p}><rect x="7" y="5" width="10" height="14" rx="1.5" /><path d="M3 4v16M21 4v16" /></Svg>,
+    PadV: (p: P) => <Svg {...p}><rect x="5" y="7" width="14" height="10" rx="1.5" /><path d="M4 3h16M4 21h16" /></Svg>,
+    Bookmark: (p: P) => <Svg {...p}><path d="M6 3h12v18l-6-4-6 4z" /></Svg>,
 };
 
 export function iconForType(type: string) {
@@ -76,6 +88,11 @@ export function iconForType(type: string) {
         case 'clock-text': return I.Clock;
         case 'spacer': return I.Spacer;
         case 'divider': return I.Divider;
+        case 'icon': return I.Star;
+        case 'content-row': return I.Row;
+        case 'content-grid': return I.Components;
+        case 'banner': return I.Banner;
+        case 'weather-full': return I.Sun;
         default: return I.Widget;
     }
 }

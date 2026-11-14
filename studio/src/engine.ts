@@ -4,7 +4,7 @@ import engineSource from '../../app/src/main/assets/web/fmtv/engine.js?raw';
 import type { Layout, LayoutNode, Rect, ValidationResult } from './model/types';
 
 export interface PropSpec {
-    type: 'string' | 'number' | 'enum' | 'color' | 'asset' | 'action';
+    type: 'string' | 'number' | 'enum' | 'color' | 'asset' | 'action' | 'boolean';
     def?: unknown;
     max?: number;
     min?: number;
@@ -25,6 +25,8 @@ export interface EngineApi {
     SCHEMA_VERSION: number;
     LIMITS: Record<string, number>;
     PAGES: Record<string, { label: string; runtime: boolean }>;
+    ICONS: Record<string, string>;
+    CONTENT_SOURCES: string[];
     ACTIONS: Record<string, { label: string; needsApp?: boolean }>;
     FONT_FAMILIES: Record<string, string>;
     EASINGS: Record<string, string>;

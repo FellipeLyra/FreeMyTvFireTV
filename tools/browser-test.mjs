@@ -43,6 +43,7 @@ invalid.pages.home.root.style = { background: { type: 'solid', color: 'red;backg
 const SCENARIOS = {
     none: { layout: '' },
     classic: { layout: layoutJson('classic'), assets: null },
+    streaming: { layout: layoutJson('streaming'), assets: null },
     cinema: { layout: layoutJson('cinema'), assets: join(EXAMPLES, 'cinema-assets') },
     invalid: { layout: JSON.stringify(invalid) },
 };
@@ -67,7 +68,7 @@ const MOCK = (layout) => `<script>
     if (!el) return null;
     var r = el.getBoundingClientRect();
     return { id: el.id || el.getAttribute('data-fmtv-id') || el.getAttribute('data-id') || el.getAttribute('data-title') || el.className,
-             tile: el.classList.contains('app-tile'), inLayout: !!(document.getElementById('fmtvLayoutRoot') || {contains:function(){return false;}}).contains(el),
+             tile: el.classList.contains('app-tile'), card: el.classList.contains('fmtv-card'), inRow: !!el.closest('.fmtv-row'), inLayout: !!(document.getElementById('fmtvLayoutRoot') || {contains:function(){return false;}}).contains(el),
              visible: r.width > 0 && r.height > 0 };
   }
   function press(key){
@@ -88,7 +89,14 @@ const MOCK = (layout) => `<script>
         parked: Array.prototype.map.call(document.querySelectorAll('#fmtvParking > *'), function(e){ return e.id || e.className; }),
         restoreButton: !!document.getElementById('fmtvRestoreLayout'),
         rootBackground: root ? getComputedStyle(root).backgroundImage.slice(0, 120) : null,
-        tiles: document.querySelectorAll('#appsGrid .app-tile').length
+        tiles: document.querySelectorAll('#appsGrid .app-tile').length,
+        rows: Array.prototype.map.call(document.querySelectorAll('.fmtv-row'), function(r){ return r.querySelectorAll('.fmtv-card').length; }),
+        bannerTitle: (document.querySelector('.fmtv-banner-title') || {}).textContent || null,
+        weatherTemp: (document.querySelector('.fmtv-weather-temp') || {}).textContent || null,
+        icons: document.querySelectorAll('.fmtv-icon svg path').length,
+        viewport: window.innerWidth + 'x' + window.innerHeight,
+        scrolled: Array.prototype.filter.call(document.querySelectorAll('*'), function(e){ return e.scrollTop || e.scrollLeft; }).map(function(e){ return [e.id || e.getAttribute('data-fmtv-id') || e.className, e.scrollTop, e.scrollLeft]; }).concat([['window', window.scrollY, window.scrollX]]),
+        nav: (window.mainNavItems || []).map(function(e){ var r = e.getBoundingClientRect(); return [describe(e).id, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; })
       };
       // Put focus back where the screenshot expects it.
       var pre = document.createElement('pre'); pre.id = 'fmtvTestResult'; pre.style.display = 'none';
@@ -125,11 +133,15 @@ const server = createServer((req, res) => {
 });
 
 // Asynchronous on purpose: this process also serves the page Chrome is loading.
+// Headless Chrome's --dump-dom viewport is smaller than --window-size (window UI), so
+// the window is grown until the page sees exactly the TV's 1920x1080.
+let windowSize = { w: 1920, h: 1080 };
 function runChrome(port, extra) {
     const profile = mkdtempSync(join(tmpdir(), 'fmtv-chrome-'));
+    const size = extra.some((a) => a.startsWith('--screenshot')) ? { w: 1920, h: 1080 } : windowSize;
     return new Promise((done) => {
         execFile(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
-            `--user-data-dir=${profile}`, '--window-size=1920,1080', '--virtual-time-budget=12000', ...extra,
+            `--user-data-dir=${profile}`, `--window-size=${size.w},${size.h}`, '--virtual-time-budget=12000', ...extra,
             `http://127.0.0.1:${port}/assets/web/index.html`], { encoding: 'utf8', timeout: 60000, maxBuffer: 64 * 1024 * 1024 },
         (error, stdout, stderr) => {
             try { rmSync(profile, { recursive: true, force: true }); } catch {}
@@ -149,13 +161,21 @@ const port = server.address().port;
 for (const name of Object.keys(SCENARIOS).filter((n) => !process.env.FMTV_ONLY || process.env.FMTV_ONLY.split(',').includes(n))) {
     current = name;
     console.log(`\n[${name}]`);
-    const r = await runChrome(port, ['--dump-dom']);
-    const m = /<pre id="fmtvTestResult"[^>]*>([\s\S]*?)<\/pre>/.exec(r.stdout || '');
+    let r = await runChrome(port, ['--dump-dom']);
+    let m = /<pre id="fmtvTestResult"[^>]*>([\s\S]*?)<\/pre>/.exec(r.stdout || '');
+    const vp = m && /"viewport":"(\d+)x(\d+)"/.exec(m[1].replace(/&quot;/g, '"'));
+    if (vp && (Number(vp[1]) !== 1920 || Number(vp[2]) !== 1080)) {
+        windowSize = { w: windowSize.w + 1920 - Number(vp[1]), h: windowSize.h + 1080 - Number(vp[2]) };
+        r = await runChrome(port, ['--dump-dom']);
+        m = /<pre id="fmtvTestResult"[^>]*>([\s\S]*?)<\/pre>/.exec(r.stdout || '');
+    }
     if (!m) { check('página carregou e o teste rodou', false, 'stdout=' + (r.stdout || '').length + ' status=' + r.status + ' ' + (r.stdout || '').slice(-400)); continue; }
     const log = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
     const calls = log.calls.map((c) => c[0]);
     const focus = log.focus;
+    check('tela de 1920×1080, como na TV', log.dom.viewport === '1920x1080', log.dom.viewport);
     if (process.env.FMTV_VERBOSE) console.log(JSON.stringify(focus.map((f) => [f[0], f[1] && f[1].id])));
+    if (process.env.FMTV_VERBOSE === '2') console.log('viewport', log.dom.viewport);
     check('sem erros de JavaScript', log.errors.length === 0, log.errors.join(' | '));
     check('foco inicial existe', !!focus[0][1], JSON.stringify(focus[0]));
     check('todo foco cai em elemento visível', focus.every((f) => f[1] && f[1].visible), JSON.stringify(focus));
@@ -186,6 +206,19 @@ for (const name of Object.keys(SCENARIOS).filter((n) => !process.env.FMTV_ONLY |
             check('fundo com o asset do layout', /userlayout\/assets\/aurora\.jpg/.test(log.dom.rootBackground), log.dom.rootBackground);
             check('destaque não usado ficou estacionado', log.dom.parked.some((p) => /hero-shelf/.test(p)), JSON.stringify(log.dom.parked));
         }
+    }
+    if (name === 'streaming') {
+        check('layout montado', log.dom.root && log.dom.containerHidden === true);
+        check('renderização confirmada ao app', log.calls.some((c) => c[0] === 'layoutRendered' && c[1] === name));
+        check('dois carrosséis com cartões', log.dom.rows.length === 2 && log.dom.rows.every((n) => n > 0), JSON.stringify(log.dom.rows));
+        check('banner com título vindo do serviço de filmes', !!log.dom.bannerTitle && log.dom.bannerTitle !== 'Loading...', log.dom.bannerTitle);
+        check('clima completo com temperatura', !!log.dom.weatherTemp, log.dom.weatherTemp);
+        check('ícone desenhado', log.dom.icons === 1, String(log.dom.icons));
+        check('foco inicial no primeiro cartão do carrossel de apps', focus[0][1] && focus[0][1].card && focus[0][1].inRow, JSON.stringify(focus[0][1]));
+        check('→ anda pelo carrossel', focus[1][1] && focus[1][1].card && focus[1][1].id !== focus[0][1].id, JSON.stringify(focus[1][1]));
+        check('↑ sai do carrossel para o destaque/clima', focus[3][1] && !focus[3][1].card, JSON.stringify(focus[3][1]));
+        check('↓ chega ao carrossel de séries', focus.slice(5, 8).some((f) => f[1] && f[1].card), JSON.stringify(focus.slice(5, 8)));
+        check('foco nunca sai do layout', focus.every((f) => f[1] && f[1].inLayout), JSON.stringify(focus.filter((f) => !f[1] || !f[1].inLayout)));
     }
     if (shotsDir) {
         mkdirSync(shotsDir, { recursive: true });

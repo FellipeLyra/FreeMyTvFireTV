@@ -104,6 +104,9 @@ export function TopBar() {
                 <button className="tb-icon" title="Aumentar zoom (Ctrl+=)" onClick={() => s.setZoom(zoom * 1.25)}><I.Plus /></button>
                 <button className={'tb-icon' + (showSafeArea ? ' on' : '')} title="Área segura da TV" onClick={() => s.toggle('showSafeArea')}><I.Safe /></button>
                 <button className={'tb-icon' + (snap ? ' on' : '')} title="Grade e guias inteligentes (segure Alt para soltar livre)" onClick={() => s.toggle('snap')}><I.Grid /></button>
+                <span className="tb-sep" />
+                <button className="tb-icon" title="Stack horizontal: agrupa os elementos selecionados (Ctrl+G) ou cria uma vazia" onClick={() => s.createStack('horizontal')}><I.StackH /></button>
+                <button className="tb-icon" title="Stack vertical: agrupa os elementos selecionados (Ctrl+Alt+G) ou cria uma vazia" onClick={() => s.createStack('vertical')}><I.StackV /></button>
             </div>
 
             <div className="tb-group">

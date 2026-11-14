@@ -169,6 +169,8 @@
             var tick = function() { el.textContent = formatClock(fmt); };
             tick();
             clockTimers.push(setInterval(tick, 1000));
+        } else if (window.FMTVBlocks && window.FMTVBlocks.builds(node.type)) {
+            window.FMTVBlocks.build(node, el, ctx);
         } else if (def.slot) {
             el.className = 'fmtv-slot';
             var widget = takeSlot(def.slot);
@@ -201,6 +203,7 @@
     /* ---------------- render / clear ---------------- */
 
     function clear() {
+        if (window.FMTVBlocks) window.FMTVBlocks.reset();
         for (var i = 0; i < clockTimers.length; i++) clearInterval(clockTimers[i]);
         clockTimers = [];
         restoreSlots();

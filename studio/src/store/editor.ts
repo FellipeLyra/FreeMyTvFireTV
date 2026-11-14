@@ -9,6 +9,7 @@ import { E } from '../engine';
 import type { Anchor, Asset, LayoutNode, Project, Rect, ValidationResult } from '../model/types';
 import * as T from '../model/tree';
 import { newProject } from '../model/project';
+import type { Block } from '../model/blocks';
 
 const HISTORY_LIMIT = 200;
 const COALESCE_MS = 700;
@@ -89,6 +90,16 @@ export interface EditorState {
     toggleLocked(id: string): void;
     addAsset(asset: Asset, base64: string): void;
     removeAsset(id: string): void;
+    insertBlock(block: Block, target?: { parentId: string; index: number; rect?: Rect }): string | null;
+    /** Shift+A: add auto layout to a container, or wrap the selection in a stack (direction guessed). */
+    toggleAutoLayout(): void;
+    addAutoLayout(id: string): void;
+    removeAutoLayout(id: string): void;
+    /** Wrap the selected elements in a stack, or add an empty one when nothing (or only the screen) is selected. */
+    createStack(direction: 'horizontal' | 'vertical', target?: { parentId: string; index: number; rect?: Rect }): void;
+    saveSelectionAsBlock(): void;
+    renameBlock(id: string, name: string): void;
+    removeBlock(id: string): void;
 }
 
 const root = (p: Project | Draft<Project>, page: string) => p.layout.pages[page].root as LayoutNode;
@@ -161,11 +172,16 @@ export const useEditor = create<EditorState>((set, get) => {
             // Drop selected ids that no longer exist.
             const r = root(next, s.page);
             const selection = s.selection.filter((id) => !!T.find(r, id));
+            const validation = validate(next);
             set({
                 project: next, past, future: [], dirty: true, selection,
                 coalesce: coalesceKey ? { key: coalesceKey, at: now } : null,
-                validation: validate(next),
+                validation,
             });
+            // Say it right away when a change makes the layout invalid: the canvas keeps
+            // showing the last valid version, which would otherwise look like "nothing happened".
+            const fresh = validation.errors.find((e) => !s.validation.errors.some((o) => o.message === e.message && o.path === e.path));
+            if (fresh) get().toast(`Mudança inválida: ${fresh.message}. O canvas mostra a última versão válida até corrigir (veja os erros na barra de baixo).`, 'error');
         },
         undo() {
             const s = get();
@@ -480,6 +496,135 @@ export const useEditor = create<EditorState>((set, get) => {
                 p.assetData[asset.id] = base64;
             });
         },
+        insertBlock(block, target) {
+            const s = get();
+            const r = root(s.project, s.page);
+            let parentId = r.id, index = (r.children || []).length;
+            if (target) { parentId = target.parentId; index = target.index; }
+            else if (s.selection.length === 1) {
+                const loc = T.find(r, s.selection[0]);
+                if (loc && E.registry[loc.node.type]?.container) { parentId = loc.node.id; index = (loc.node.children || []).length; }
+                else if (loc && loc.parent) { parentId = loc.parent.id; index = loc.index + 1; }
+            }
+            if (block.fill) { parentId = target?.parentId || r.id; index = 0; }
+            let created: string | null = null;
+            edit('inserir bloco', (rt) => {
+                const parent = T.find(rt, parentId)!.node;
+                const copy = T.cloneWithNewIds(block.node as LayoutNode, T.allIds(rt));
+                if (!copy) throw new Error('este bloco só contém widgets do launcher, que não podem ser copiados');
+                if (!copy.name) copy.name = block.name;
+                const pr = get().rects[parent.id] || { x: 0, y: 0, w: 1920, h: 1080 };
+                if (block.fill) {
+                    T.dropFlowSize(copy);
+                    if (parent.type !== 'frame') copy.position = 'absolute';
+                    copy.constraints = { h: { anchor: 'stretch', start: 0, end: 0 }, v: { anchor: 'stretch', start: 0, end: 0 } };
+                } else if (parent.type === 'frame') {
+                    const rect = target?.rect || T.defaultDropRect(copy, pr.w / 2, pr.h / 2);
+                    T.dropFlowSize(copy);
+                    T.placeAbsolute(copy, rect, { w: pr.w, h: pr.h });
+                }
+                T.insert(parent, copy, index);
+                created = copy.id;
+            });
+            if (created) set({ selection: [created] });
+            return created;
+        },
+
+        addAutoLayout(id) {
+            const s = get();
+            const cr = s.rects[id];
+            const loc = T.find(root(s.project, s.page), id);
+            if (!loc || !cr) return;
+            const rel: Record<string, Rect> = {};
+            for (const k of loc.node.children || []) {
+                const r = s.rects[k.id];
+                if (r) rel[k.id] = { x: r.x - cr.x, y: r.y - cr.y, w: r.w, h: r.h };
+            }
+            edit('adicionar auto layout', (r) => T.addAutoLayout(T.find(r, id)!.node, rel, { w: cr.w, h: cr.h }));
+            s.toast('Auto layout adicionado: direção, espaçamento e padding vieram das posições atuais');
+        },
+        removeAutoLayout(id) {
+            const s = get();
+            const cr = s.rects[id];
+            const loc = T.find(root(s.project, s.page), id);
+            if (!loc || !cr) return;
+            const rel: Record<string, Rect> = {};
+            for (const k of loc.node.children || []) {
+                const r = s.rects[k.id];
+                if (r) rel[k.id] = { x: r.x - cr.x, y: r.y - cr.y, w: r.w, h: r.h };
+            }
+            edit('remover auto layout', (r) => T.removeAutoLayout(T.find(r, id)!.node, rel, { w: cr.w, h: cr.h }));
+            s.toast('Auto layout removido: os elementos ficaram livres, no mesmo lugar');
+        },
+        toggleAutoLayout() {
+            const s = get();
+            const r = root(s.project, s.page);
+            const sel = s.selection.filter((id) => id !== r.id);
+            if (sel.length === 1) {
+                const loc = T.find(r, sel[0]);
+                if (loc && loc.node.type === 'frame') { s.addAutoLayout(sel[0]); return; }
+                if (loc && loc.node.type === 'stack') { s.toast('já tem auto layout (para remover, use o painel à direita)'); return; }
+            }
+            if (!sel.length && s.selection[0] === r.id && r.type === 'frame') { s.addAutoLayout(r.id); return; }
+            const rects = sel.map((id) => s.rects[id]).filter(Boolean);
+            s.createStack(T.guessDirection(rects));
+        },
+
+        createStack(direction, target) {
+            const s = get();
+            const r = root(s.project, s.page);
+            const sel = s.selection.filter((id) => id !== r.id);
+            if (!target && sel.length) {
+                s.wrapSelection(direction);
+                s.toast(`${sel.length} elemento(s) agrupado(s) numa stack ${direction === 'horizontal' ? 'horizontal' : 'vertical'}`, 'success');
+                return;
+            }
+            const id = s.addNode('stack', target);
+            if (!id) return;
+            s.updateNode(id, (n) => { n.layout = { ...(n.layout || {}), direction }; n.name = direction === 'horizontal' ? 'Stack horizontal' : 'Stack vertical'; });
+            s.toast('Stack criada. Arraste elementos para dentro dela, ou selecione vários e use Ctrl+G.', 'success');
+        },
+
+        saveSelectionAsBlock() {
+            const s = get();
+            const locs = selectedNodes(s);
+            if (locs.length !== 1 || !locs[0].parent) { s.toast('selecione um elemento (ou agrupe vários numa stack) para salvar como bloco', 'error'); return; }
+            const { node, parent } = locs[0];
+            const copy = T.cloneWithNewIds(node, new Set());
+            if (!copy) { s.toast('widgets do launcher não podem virar bloco (cada um aparece uma vez na tela)', 'error'); return; }
+            // A block keeps its size, not its position: positions come from where it is inserted.
+            if (T.isAbsolute(node, parent)) {
+                // Size from the canvas measure, or from the constraints when not measured yet.
+                const pr = s.rects[parent.id] || { w: 1920, h: 1080 };
+                const r = s.rects[node.id] || (node.constraints
+                    ? { w: T.axisRange(node.constraints.h, pr.w)[1], h: T.axisRange(node.constraints.v, pr.h)[1] }
+                    : null);
+                delete copy.constraints;
+                delete copy.position;
+                if (r) copy.size = { ...(copy.size || {}), width: { mode: 'fixed', value: Math.round(r.w) }, height: { mode: 'fixed', value: Math.round(r.h) } };
+            }
+            const name = node.name || E.registry[node.type]?.label || 'Bloco';
+            s.commit('salvar bloco', (p) => {
+                p.blocks = [...(p.blocks || []), { id: 'blk-' + Date.now().toString(36), name, node: copy }];
+            });
+            s.setLeftTab('components');
+            s.toast(`"${name}" salvo em Meus blocos`, 'success');
+        },
+
+        renameBlock(id, name) {
+            get().commit('renomear bloco', (p) => {
+                const b = (p.blocks || []).find((x) => x.id === id);
+                if (b && name.trim()) b.name = name.trim().slice(0, 80);
+            }, 'block-name:' + id);
+        },
+
+        removeBlock(id) {
+            get().commit('excluir bloco', (p) => {
+                p.blocks = (p.blocks || []).filter((x) => x.id !== id);
+                if (!p.blocks.length) delete p.blocks;
+            });
+        },
+
         removeAsset(id) {
             const s = get();
             let used = false;

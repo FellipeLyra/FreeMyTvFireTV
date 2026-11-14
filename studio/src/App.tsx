@@ -73,7 +73,8 @@ export function App() {
             else if (mod && k === 'x') { e.preventDefault(); s.cutSelection(); }
             else if (mod && k === 'v') { e.preventDefault(); s.paste(); }
             else if (mod && k === 'g' && e.shiftKey) { e.preventDefault(); s.unwrapSelection(); }
-            else if (mod && k === 'g') { e.preventDefault(); s.wrapSelection(e.altKey ? 'vertical' : 'horizontal'); }
+            else if (mod && k === 'g') { e.preventDefault(); s.createStack(e.altKey ? 'vertical' : 'horizontal'); }
+            else if (e.shiftKey && !mod && k === 'a') { e.preventDefault(); s.toggleAutoLayout(); }
             else if (mod && e.shiftKey && k === 'h') { e.preventDefault(); s.selection.forEach((id) => s.toggleVisible(id)); }
             else if (mod && e.shiftKey && k === 'l') { e.preventDefault(); s.selection.forEach((id) => s.toggleLocked(id)); }
             else if (mod && e.key === ']') { e.preventDefault(); s.reorderSelection(e.shiftKey ? 'forward' : 'front'); }

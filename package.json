@@ -1,10 +1,15 @@
 {
   "name": "freemytv-firetv-tools",
   "private": true,
-  "description": "Layout engine tests and the fmtv CLI (no dependencies, Node 18+)",
+  "description": "Layout engine tests, the fmtv CLI (no dependencies, Node 18+) and shortcuts to Free My TV Studio",
   "scripts": {
     "test": "node --test tools/test/",
     "test:browser": "node tools/browser-test.mjs",
-    "fmtv": "node tools/fmtv.mjs"
+    "fmtv": "node tools/fmtv.mjs",
+    "studio:install": "npm --prefix studio install",
+    "dev": "npm --prefix studio run dev",
+    "desktop": "npm --prefix studio run desktop",
+    "desktop:build": "npm --prefix studio run desktop:build",
+    "studio:test": "npm --prefix studio test"
   }
 }

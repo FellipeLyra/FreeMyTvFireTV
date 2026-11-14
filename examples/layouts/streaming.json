@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "id": "streaming",
+  "name": "Streaming",
+  "generator": "hand-written example",
+  "tokens": {
+    "colors": { "accent": "#ff6b4a", "surface": "rgba(255,255,255,0.08)", "focus": "#ffffff" }
+  },
+  "pages": {
+    "home": {
+      "root": {
+        "id": "root",
+        "type": "frame",
+        "name": "Tela",
+        "layout": { "clip": true },
+        "style": { "background": { "type": "linear", "angle": 160, "stops": [
+          { "color": "#2a1320", "pos": 0 }, { "color": "#0b0d16", "pos": 55 }, { "color": "#05060a", "pos": 100 } ] } },
+        "children": [
+          {
+            "id": "header",
+            "type": "stack",
+            "name": "Cabeçalho",
+            "constraints": { "h": { "anchor": "stretch", "start": 64, "end": 64 }, "v": { "anchor": "start", "offset": 34, "size": 64 } },
+            "layout": { "direction": "horizontal", "align": "center", "gap": 16 },
+            "children": [
+              { "id": "logo-icon", "type": "icon", "props": { "name": "play", "color": "$colors.accent", "strokeWidth": 2.5 },
+                "size": { "width": { "mode": "fixed", "value": 40 }, "height": { "mode": "fixed", "value": 40 } } },
+              { "id": "title", "type": "text", "props": { "text": "Cine em casa" }, "text": { "size": 34, "weight": 800 } },
+              { "id": "header-space", "type": "spacer" },
+              { "id": "clock", "type": "clock-text", "text": { "size": 34, "weight": 300 } },
+              { "id": "customize", "type": "launcher.settings-button" }
+            ]
+          },
+          {
+            "id": "featured",
+            "type": "banner",
+            "name": "Destaque",
+            "constraints": { "h": { "anchor": "start", "offset": 64, "size": 1180 }, "v": { "anchor": "start", "offset": 120, "size": 390 } },
+            "props": { "source": "movies", "rotateSeconds": 8, "buttonLabel": "Assistir" },
+            "animation": { "enter": { "preset": "fade", "duration": 600 } }
+          },
+          {
+            "id": "weather",
+            "type": "weather-full",
+            "name": "Clima",
+            "constraints": { "h": { "anchor": "end", "offset": 64, "size": 580 }, "v": { "anchor": "start", "offset": 120, "size": 390 } },
+            "props": { "hours": 5, "showSun": true, "opensDrawer": true }
+          },
+          {
+            "id": "rows",
+            "type": "stack",
+            "name": "Fileiras",
+            "constraints": { "h": { "anchor": "stretch", "start": 60, "end": 0 }, "v": { "anchor": "end", "offset": 20, "size": 540 } },
+            "layout": { "direction": "vertical", "gap": 6, "align": "stretch" },
+            "children": [
+              { "id": "apps-title", "type": "text", "props": { "text": "Seus apps" }, "text": { "size": 26, "weight": 700 } },
+              { "id": "apps-row", "type": "content-row", "focus": { "initial": true },
+                "props": { "source": "favorites", "cardStyle": "app", "showTitles": false, "maxItems": 12 } },
+              { "id": "shows-title", "type": "text", "props": { "text": "Séries em alta" }, "text": { "size": 26, "weight": 700 } },
+              { "id": "shows-row", "type": "content-row",
+                "props": { "source": "shows", "cardStyle": "wide", "showTitles": true, "maxItems": 10 } }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

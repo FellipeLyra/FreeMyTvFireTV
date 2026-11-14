@@ -91,7 +91,10 @@ export function parseProject(text: string): Project {
     if (!m.ok || !m.layout) throw new Error(m.error || 'layout inválido');
     const assetData: Record<string, string> = {};
     for (const [k, v] of Object.entries(p.assetData || {})) if (typeof v === 'string') assetData[k] = v;
-    return { format: 'fmtv-studio-project', formatVersion: 1, layout: m.layout, assetData };
+    const blocks = Array.isArray(p.blocks)
+        ? p.blocks.filter((b) => b && typeof b.id === 'string' && typeof b.name === 'string' && b.node && typeof b.node.type === 'string').slice(0, 200)
+        : [];
+    return { format: 'fmtv-studio-project', formatVersion: 1, layout: m.layout, assetData, ...(blocks.length ? { blocks } : {}) };
 }
 
 export function serializeProject(project: Project): string {

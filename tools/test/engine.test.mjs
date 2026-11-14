@@ -180,3 +180,31 @@ test('migration framework refuses unknown old versions', () => {
     assert.equal(E.migrate({ schemaVersion: 0 }).ok, false);
     assert.equal(E.migrate({ schemaVersion: 1, x: 1 }).ok, true);
 });
+
+test('content blocks: valid props pass, bad ones fail', () => {
+    const page = (child) => ({ schemaVersion: 1, id: 't', name: 'T', pages: { home: { root: { id: 'root', type: 'stack', children: [child] } } } });
+    assert.equal(E.validate(page({ id: 'r', type: 'content-row', props: { source: 'shows', cardStyle: 'wide', maxItems: 6, showTitles: false } })).ok, true);
+    assert.equal(E.validate(page({ id: 'g', type: 'content-grid', props: { source: 'apps', columns: 6 } })).ok, true);
+    assert.equal(E.validate(page({ id: 'b', type: 'banner', props: { source: 'movies', rotateSeconds: 0, buttonLabel: 'Ver' } })).ok, true);
+    assert.equal(E.validate(page({ id: 'r', type: 'content-row', props: { source: 'youtube' } })).ok, false);
+    assert.equal(E.validate(page({ id: 'r', type: 'content-row', props: { showTitles: 'yes' } })).ok, false);
+    assert.equal(E.validate(page({ id: 'g', type: 'content-grid', props: { columns: 12 } })).ok, false);
+    assert.equal(E.validate(page({ id: 'b', type: 'banner', props: { source: 'apps' } })).ok, false);
+    // A full-weather block that does not open the drawer cannot be the only focusable thing.
+    assert.match(messages(E.validate(page({ id: 'w', type: 'weather-full', props: { opensDrawer: false } }))), /navegável/);
+    assert.equal(E.validate(page({ id: 'w', type: 'weather-full' })).ok, true);
+});
+
+test('icons come from the fixed set only', () => {
+    const page = (props) => ({ schemaVersion: 1, id: 't', name: 'T', pages: { home: { root: { id: 'root', type: 'stack', children: [{ id: 'apps', type: 'launcher.app-shelf' }, { id: 'i', type: 'icon', props }] } } } });
+    assert.equal(E.validate(page({ name: 'heart', color: '#ff0000' })).ok, true);
+    assert.equal(E.validate(page({ name: '<svg onload=alert(1)>' })).ok, false);
+    assert.ok(Object.keys(E.ICONS).length >= 20);
+    for (const d of Object.values(E.ICONS)) assert.match(d, /^[MmLlHhVvCcSsQqTtAaZz0-9 .,-]+$/);
+});
+
+test('example layouts with content blocks are valid and need no app shelf warning', () => {
+    const { validation } = prepare(join(EX, 'streaming.json'), join(EX, 'streaming-assets'));
+    assert.equal(validation.ok, true, messages(validation));
+    assert.equal(validation.warnings.length, 0, JSON.stringify(validation.warnings));
+});

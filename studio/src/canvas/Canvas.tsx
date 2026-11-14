@@ -5,6 +5,7 @@ import * as T from '../model/tree';
 import type { LayoutNode, Rect } from '../model/types';
 import { PreviewFrame, STAGE_H, STAGE_W } from './preview';
 import { ContextMenu, type MenuItem } from '../ui/ContextMenu';
+import { BUILTIN_BLOCKS, type Block } from '../model/blocks';
 
 export let preview: PreviewFrame | null = null;
 
@@ -99,6 +100,15 @@ export function Canvas() {
         const t = setTimeout(measure, 300);
         return () => clearTimeout(t);
     }, [ready, project, page, measure]);
+
+    // Content blocks only manage remote focus while the preview is being "played".
+    useEffect(() => {
+        const w = preview?.win;
+        if (!ready || !w) return;
+        w.__fmtvPreviewPlaying = mode === 'preview';
+        if (mode === 'preview' && typeof w.refreshMainNavList === 'function') w.refreshMainNavList();
+        if (mode === 'edit') preview?.releaseFocus();
+    }, [mode, ready]);
 
     useEffect(() => {
         if (!ready) return;
@@ -340,7 +350,7 @@ export function Canvas() {
     const dragTypes = (e: React.DragEvent) => Array.from(e.dataTransfer.types);
     const onDragOver = (e: React.DragEvent) => {
         const types = dragTypes(e);
-        if (!types.includes('application/x-fmtv-component') && !types.includes('application/x-fmtv-asset')) return;
+        if (!types.includes('application/x-fmtv-component') && !types.includes('application/x-fmtv-asset') && !types.includes('application/x-fmtv-block')) return;
         e.preventDefault();
         const { x, y } = toStage(e);
         setExternal(dropTargetAt(x, y, null, { w: 240, h: 120 }));
@@ -350,12 +360,26 @@ export function Canvas() {
         const { x, y } = toStage(e);
         const type = e.dataTransfer.getData('application/x-fmtv-component');
         const asset = e.dataTransfer.getData('application/x-fmtv-asset');
+        const blockId = e.dataTransfer.getData('application/x-fmtv-block');
         setExternal(null);
         const s = useEditor.getState();
+        if (blockId) {
+            const block: Block | undefined = BUILTIN_BLOCKS.find((b) => b.id === blockId) || (s.project.blocks || []).find((b) => b.id === blockId);
+            if (!block) return;
+            const r = T.defaultDropRect(block.node, 0, 0);
+            const bt = dropTargetAt(x, y, null, { w: r.w, h: r.h });
+            if (bt) s.insertBlock(block, { parentId: bt.parentId, index: bt.index, rect: bt.rect });
+            return;
+        }
         const probe = T.createNode(type || 'image', new Set());
         const size = T.defaultDropRect(probe, 0, 0);
         const t = dropTargetAt(x, y, null, { w: size.w, h: size.h });
         if (!t) return;
+        if (type === 'stack') {
+            const dir = e.dataTransfer.getData('application/x-fmtv-direction') === 'vertical' ? 'vertical' : 'horizontal';
+            s.createStack(dir, { parentId: t.parentId, index: t.index, rect: t.rect });
+            return;
+        }
         const id = s.addNode(type || 'image', { parentId: t.parentId, index: t.index, rect: t.rect });
         if (id && asset) s.updateNode(id, (n) => { n.props = { ...(n.props || {}), asset }; });
     };
@@ -386,6 +410,7 @@ export function Canvas() {
             { label: 'Criar stack horizontal', shortcut: 'Ctrl+G', action: () => s.wrapSelection('horizontal'), disabled: !selection.length },
             { label: 'Criar stack vertical', shortcut: 'Ctrl+Alt+G', action: () => s.wrapSelection('vertical'), disabled: !selection.length },
             { label: 'Desagrupar', shortcut: 'Ctrl+Shift+G', action: s.unwrapSelection, disabled: !isCont || !one?.parent },
+            { label: 'Salvar como bloco', shortcut: 'Meus blocos', action: s.saveSelectionAsBlock, disabled: !one?.parent },
             { separator: true },
             { label: 'Trazer para frente', shortcut: 'Ctrl+]', action: () => s.reorderSelection('front'), disabled: !selection.length },
             { label: 'Enviar para trás', shortcut: 'Ctrl+[', action: () => s.reorderSelection('back'), disabled: !selection.length },
@@ -404,6 +429,8 @@ export function Canvas() {
     );
 
     const selRects = selection.map((id) => ({ id, r: rects[id] })).filter((x) => x.r);
+    const emptyContainers: LayoutNode[] = [];
+    E.walk(root, (n, p) => { if (p && E.registry[n.type]?.container && !(n.children || []).length && n.visible !== false) emptyContainers.push(n); });
     const single = selection.length === 1 ? T.find(root, selection[0]) : null;
     const showHandles = !!single && !!single.parent && !single.node.locked && !d;
     const sizeLabel = single && rects[single.node.id];
@@ -421,6 +448,11 @@ export function Canvas() {
                         onDragStart={(e) => e.preventDefault()} onPointerCancel={() => { drag.current = null; redraw(); }}
                         onDoubleClick={() => window.dispatchEvent(new CustomEvent('fmtv:focus-props'))}>
                         {showSafeArea && <div className="safe-area" style={{ borderWidth: 1 / z }} title="Área segura da TV (90%)" />}
+                        {emptyContainers.map((c) => rects[c.id] && (
+                            <div key={'empty-' + c.id} className="ov-empty" style={{ left: rects[c.id].x, top: rects[c.id].y, width: rects[c.id].w, height: rects[c.id].h, borderWidth: 1.5 / z }}>
+                                <span style={{ transform: `scale(${1 / z})` }}>{c.type === 'stack' ? 'Stack vazia: arraste elementos para cá' : 'Container vazio'}</span>
+                            </div>
+                        ))}
                         {hover && !selection.includes(hover) && rects[hover] && !d && box(rects[hover], 'ov-hover')}
                         {d?.kind !== 'move-abs' && d?.kind !== 'resize' && selRects.map(({ id, r }) => box(r, 'ov-selected', id))}
                         {d?.kind === 'move-abs' && d.ids.map((id) => rects[id] && box({ ...rects[id], x: rects[id].x + d.dx, y: rects[id].y + d.dy }, 'ov-ghost', id))}

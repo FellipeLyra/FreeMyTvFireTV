@@ -133,6 +133,72 @@
     defineComponent({ type: 'clock-text', label: 'Relógio (texto)', category: 'data', live: 'clock',
         props: { format: { type: 'enum', values: ['auto', '24h', '12h'], def: 'auto' } } });
 
+    // Icons are drawn from this fixed set (24px grid, stroked); layouts can only pick a name.
+    var ICONS = {
+        home: 'M3 11l9-8 9 8M5 9.5V21h5v-6h4v6h5V9.5',
+        settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+        sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
+        moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
+        cloud: 'M18 10h-1.3A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z',
+        star: 'M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z',
+        heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z',
+        play: 'M6 4l14 8-14 8z',
+        tv: 'M3 5h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 21h8',
+        film: 'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM7 3v18M17 3v18M3 8h4M17 8h4M3 12h18M3 16h4M17 16h4',
+        music: 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+        game: 'M6 11h4M8 9v4M15 12h.01M18 10h.01M17.3 5H6.7A4 4 0 0 0 2.7 8.6l-.7 6.9A3 3 0 0 0 7.2 18l1.6-1.6a2 2 0 0 1 1.4-.6h3.6a2 2 0 0 1 1.4.6l1.6 1.6a3 3 0 0 0 5.2-2.5l-.7-6.9A4 4 0 0 0 17.3 5z',
+        search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
+        clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
+        wifi: 'M5 12.6a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0M2 8.8a15 15 0 0 1 20 0M12 20h.01',
+        user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+        bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
+        bolt: 'M13 2L3 14h9l-1 8 10-12h-9z',
+        apps: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+        arrow: 'M5 12h14M12 5l7 7-7 7',
+        back: 'M19 12H5M12 19l-7-7 7-7',
+        sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z'
+    };
+    var ICON_NAMES = Object.keys(ICONS);
+    defineComponent({ type: 'icon', label: 'Ícone', category: 'basic',
+        props: {
+            name: { type: 'enum', values: ICON_NAMES, def: 'star' },
+            color: { type: 'color', def: '$colors.text' },
+            strokeWidth: { type: 'number', min: 1, max: 4, def: 2 }
+        } });
+
+    // Content blocks: filled at runtime by the launcher's own data services
+    // (TMDB/TVMaze trending, Open-Meteo weather, installed apps). Layouts only
+    // choose the source and the presentation.
+    var CONTENT_SOURCES = ['movies', 'shows', 'apps', 'favorites'];
+    var CARD_STYLES = ['poster', 'wide', 'app'];
+    defineComponent({ type: 'content-row', label: 'Carrossel', category: 'data', focusable: true, live: 'content',
+        props: {
+            source: { type: 'enum', values: CONTENT_SOURCES, def: 'movies' },
+            maxItems: { type: 'number', min: 1, max: 20, def: 10 },
+            cardStyle: { type: 'enum', values: CARD_STYLES, def: 'poster' },
+            showTitles: { type: 'boolean', def: true }
+        } });
+    defineComponent({ type: 'content-grid', label: 'Grade de conteúdo', category: 'data', focusable: true, live: 'content',
+        props: {
+            source: { type: 'enum', values: CONTENT_SOURCES, def: 'apps' },
+            columns: { type: 'number', min: 1, max: 8, def: 5 },
+            maxItems: { type: 'number', min: 1, max: 40, def: 10 },
+            cardStyle: { type: 'enum', values: CARD_STYLES, def: 'app' },
+            showTitles: { type: 'boolean', def: true }
+        } });
+    defineComponent({ type: 'banner', label: 'Banner de destaque', category: 'data', focusable: true, live: 'content',
+        props: {
+            source: { type: 'enum', values: ['movies', 'shows'], def: 'movies' },
+            rotateSeconds: { type: 'number', min: 0, max: 60, def: 8 },
+            buttonLabel: { type: 'string', max: 30, def: 'Assistir' }
+        } });
+    defineComponent({ type: 'weather-full', label: 'Clima completo', category: 'data', focusable: true, live: 'weather',
+        props: {
+            hours: { type: 'number', min: 0, max: 6, def: 6 },
+            showSun: { type: 'boolean', def: true },
+            opensDrawer: { type: 'boolean', def: true }
+        } });
+
     function slot(type, label, selector, extra) {
         var def = { type: type, label: label, category: 'launcher', slot: selector, props: {} };
         for (var k in extra) def[k] = extra[k];
@@ -359,7 +425,7 @@
             checkKeys(r, path + '.layout', L, ['direction', 'gap', 'padding', 'align', 'justify', 'wrap', 'clip']);
             if (node.type === 'stack') {
                 checkEnum(r, path + '.layout.direction', L.direction, ['horizontal', 'vertical']);
-                checkLength(r, path + '.layout.gap', L.gap, ctx.tokens, 0, 400);
+                checkLength(r, path + '.layout.gap', L.gap, ctx.tokens, 0, 2000);
                 checkEnum(r, path + '.layout.align', L.align, ['start', 'center', 'end', 'stretch', 'baseline']);
                 checkEnum(r, path + '.layout.justify', L.justify, ['start', 'center', 'end', 'space-between', 'space-around', 'space-evenly']);
                 if (L.wrap !== undefined && typeof L.wrap !== 'boolean') r.error(path + '.layout.wrap', 'deve ser true/false');
@@ -370,8 +436,8 @@
             if (L.padding !== undefined) {
                 if (L.padding instanceof Array) {
                     if (L.padding.length !== 4) r.error(path + '.layout.padding', 'use [cima, direita, baixo, esquerda]');
-                    for (var p = 0; p < L.padding.length; p++) checkLength(r, path + '.layout.padding[' + p + ']', L.padding[p], ctx.tokens, 0, 1000);
-                } else checkLength(r, path + '.layout.padding', L.padding, ctx.tokens, 0, 1000);
+                    for (var p = 0; p < L.padding.length; p++) checkLength(r, path + '.layout.padding[' + p + ']', L.padding[p], ctx.tokens, 0, 2000);
+                } else checkLength(r, path + '.layout.padding', L.padding, ctx.tokens, 0, 2000);
             }
             if (L.clip !== undefined && typeof L.clip !== 'boolean') r.error(path + '.layout.clip', 'deve ser true/false');
             if (node.children !== undefined && !(node.children instanceof Array)) r.error(path + '.children', 'deve ser uma lista');
@@ -484,6 +550,7 @@
             if (spec.type === 'color') checkColor(r, pp, pv, ctx.tokens);
             if (spec.type === 'asset' && !ctx.assets[pv]) r.error(pp, 'asset inexistente: ' + JSON.stringify(pv));
             if (spec.type === 'action') checkAction(r, pp, pv);
+            if (spec.type === 'boolean' && typeof pv !== 'boolean') r.error(pp, 'deve ser true/false');
         }
         if (node.type === 'image' && !props.asset) r.error(path + '.props.asset', 'imagem sem asset');
 
@@ -491,7 +558,9 @@
             if (ctx.slots[node.type]) r.error(path, node.type + ' aparece mais de uma vez (cada widget do launcher só pode ser usado uma vez)');
             ctx.slots[node.type] = true;
         }
-        if (def.focusable && node.visible !== false && !(node.focus && node.focus.skip)) ctx.focusable.push(node.id);
+        if ((node.type === 'content-row' || node.type === 'content-grid') && (props.source === 'apps' || props.source === 'favorites' || (!props.source && node.type === 'content-grid'))) ctx.appsBlock = true;
+        var takesFocus = def.focusable && !(node.type === 'weather-full' && props.opensDrawer === false);
+        if (takesFocus && node.visible !== false && !(node.focus && node.focus.skip)) ctx.focusable.push(node.id);
         if (def.opensSettings || (node.type === 'button' && props.action && props.action.type === 'open-settings')) ctx.settingsReachable = true;
     }
 
@@ -575,7 +644,7 @@
             if (pid === 'home') {
                 // In the Studio an unfinished page is allowed; export and the TV are strict.
                 if (!ctx.focusable.length) (opts.studio ? r.warn : r.error).call(r, 'pages.home', 'nenhum elemento navegável pelo controle; o layout seria inutilizável');
-                if (!ctx.slots['launcher.app-shelf']) r.warn('pages.home', 'sem a prateleira de apps');
+                if (!ctx.slots['launcher.app-shelf'] && !ctx.appsBlock) r.warn('pages.home', 'sem a prateleira de apps nem um carrossel/grade de apps');
                 if (!ctx.settingsReachable) r.warn('pages.home', 'sem botão para Personalizar; ele continua acessível pela tecla ≡ do controle');
             }
         }
@@ -619,6 +688,9 @@
         else if (c.anchor === 'stretch') { out[startProp] = px(c.start); out[endProp] = px(c.end); }
         else if (c.anchor === 'scale') { out[startProp] = c.start + '%'; out[sizeProp] = c.size + '%'; }
     }
+
+    // Components whose text follows node.text (or the theme's text colour by default).
+    var TEXT_TYPES = { text: 1, button: 1, 'clock-text': 1, 'content-row': 1, 'content-grid': 1, banner: 1, 'weather-full': 1, icon: 1 };
 
     var JUSTIFY = { start: 'flex-start', center: 'center', end: 'flex-end', 'space-between': 'space-between', 'space-around': 'space-around', 'space-evenly': 'space-evenly' };
     var ALIGN = { start: 'flex-start', center: 'center', end: 'flex-end', stretch: 'stretch', baseline: 'baseline' };
@@ -714,7 +786,7 @@
         if (node.visible === false) css.display = 'none';
 
         var T = node.text;
-        if (T || node.type === 'text' || node.type === 'button' || node.type === 'clock-text') {
+        if (T || TEXT_TYPES[node.type]) {
             T = T || {};
             css.color = resolveToken(T.color, tokens, 'color') || resolveToken('$colors.text', tokens, 'color');
             css['font-family'] = FONT_FAMILIES[T.family || tokens.fontFamily] || FONT_FAMILIES.system;
@@ -866,6 +938,8 @@
         SCHEMA_VERSION: SCHEMA_VERSION,
         LIMITS: LIMITS,
         PAGES: PAGES,
+        ICONS: ICONS,
+        CONTENT_SOURCES: CONTENT_SOURCES,
         ACTIONS: ACTIONS,
         FONT_FAMILIES: FONT_FAMILIES,
         EASINGS: EASINGS,

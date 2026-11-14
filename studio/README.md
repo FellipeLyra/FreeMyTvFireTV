@@ -2,7 +2,7 @@
 
 Editor visual para PC que cria e edita a tela inicial do Free My TV. Ele gera layouts no [formato schema v1](../docs/layouts.md), que o app do Fire TV aplica sem precisar recompilar.
 
-> **Status: Fase 3 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos e exportação já funcionam. A publicação direta no Fire TV pelo Studio (Fases 7 e 8) ainda não existe: por enquanto exporte o `.fmtv` e publique com a CLI (`node tools/fmtv.mjs publish`).
+> **Status: Fases 3 e 4 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos e exportação já funcionam. A publicação direta no Fire TV pelo Studio (Fases 7 e 8) ainda não existe: por enquanto exporte o `.fmtv` e publique com a CLI (`node tools/fmtv.mjs publish`).
 
 ![Studio editando o layout Cinema](../docs/screenshots/studio-editor.jpg)
 
@@ -44,11 +44,13 @@ flowchart LR
 | **Canvas** | Tela 1920×1080; zoom com Ctrl+roda ou pelos botões; mover a vista com espaço+arrastar ou o botão do meio; "ajustar à tela"; área segura da TV (90%); medidas do elemento selecionado |
 | **Seleção** | Clique; Shift+clique para seleção múltipla; Esc limpa; caminho do elemento na barra inferior |
 | **Posição absoluta** | Arrastar com **guias inteligentes** (bordas e centros do container e dos irmãos) ou grade de 8 px (Alt solta livre); setas movem 1 px, Shift+setas 10 px; **8 alças** de redimensionar (Shift mantém a proporção); X/Y/L/A numéricos; **constraints** (esquerda, direita, centro, esticar, escala) que mudam sem mover o elemento |
-| **Auto layout** | Stacks horizontais e verticais aninhadas; gap, padding individual, alinhar, distribuir, quebra de linha, cortar conteúdo; tamanho fixo, "ajustar ao conteúdo", "preencher" ou percentual; mín./máx.; arrastar reordena com **indicador de inserção** |
+| **Auto layout** (no estilo do Figma) | Direção vertical, horizontal ou com quebra de linha; **grade 3×3 de alinhamento**; espaçamento com opção **Auto** (espaço entre); padding por eixo ou por lado; esticar filhos; linha de base; cortar conteúdo; **adicionar e remover auto layout** (Shift+A) mantendo o visual, com direção, espaçamento e padding deduzidos das posições e o que estava esticado virando **Fill**; filhos com **Fixo / Hug / Fill** ou percentual e mín./máx.; **"Ignorar auto layout"**; arrastar reordena com **indicador de inserção**; stacks vazias aparecem com contorno tracejado |
 | **Entre modos** | Levar um elemento de uma stack para um container absoluto (ou o contrário) mantendo o lugar; "No fluxo"/"Absoluto" dentro de stacks; o Studio avisa quando a mudança de modo altera algo |
 | **Organizar** | Duplicar, copiar, recortar, colar, excluir, criar stack a partir da seleção (Ctrl+G / Ctrl+Alt+G), desagrupar (Ctrl+Shift+G), trazer para frente ou enviar para trás, alinhar e distribuir, ocultar, bloquear; menu de contexto |
 | **Camadas** | Árvore com busca, expandir e recolher, renomear (duplo clique), ocultar, bloquear e arrastar para reordenar ou trocar de container |
-| **Componentes** | Stack, container absoluto, espaçador, texto, imagem, divisor, botão (com ações), relógio e os 8 widgets reais do launcher; clique para adicionar ou arraste para o canvas |
+| **Componentes** | Stack horizontal e vertical (também na barra superior), container absoluto, espaçador, texto, imagem, divisor, botão (com ações), ícone (seletor visual), relógio, **carrossel**, **grade**, **banner de destaque**, **clima completo** e os 8 widgets reais do launcher; clique para adicionar ou arraste para o canvas |
+| **Blocos prontos** | Filmes em alta, Séries em alta, Aplicativos instalados, Apps favoritos, Banner, Clima completo, Cabeçalho com relógio, atalhos para Configurações e Tela Amazon, Gradiente e fundos (Aurora, Pôr do sol, Preto OLED) |
+| **Meus blocos** | "Salvar como bloco" (botão direito) guarda um elemento para reutilizar; os blocos ficam no projeto, podem ser renomeados e excluídos e são inseridos como cópias |
 | **Assets** | Importar PNG, JPG ou WebP (até 8 MB), miniaturas, usar como fundo, arrastar para o canvas |
 | **Propriedades** | Layout, posição, tamanho, aparência (cor, gradiente com até 8 paradas, imagem, opacidade, cantos, borda, sombra, desfoque), tipografia, conteúdo e ações, foco do controle, animações (entrada e foco, com botão de reproduzir) |
 | **Tema** | Tokens de cor, fonte e tamanhos, espaçamento e cantos; elementos ligados a um token (`$colors.accent`) acompanham as mudanças; importar e exportar tema |
@@ -86,9 +88,9 @@ npm run desktop:build    # gera o instalador em src-tauri/target/release/bundle/
 ## Testes
 
 ```
-npm test                 # 26 testes: árvore, constraints, stacks, histórico, arquivos, pacote
+npm test                 # 36 testes: árvore, constraints, stacks, auto layout, blocos, histórico, arquivos, pacote
 npm run dev              # em outro terminal
-npm run e2e              # 16 verificações no Chrome de verdade, com mouse e teclado
+npm run e2e              # 30 verificações no Chrome de verdade, com mouse e teclado
 ```
 
 O teste ponta a ponta abre o Studio no modelo Cinema e, com eventos reais de mouse e teclado:
@@ -99,6 +101,10 @@ O teste ponta a ponta abre o Studio no modelo Cinema e, com eventos reais de mou
 - exclui o elemento e confere que o documento continua válido;
 - navega na Prévia pelas setas;
 - confirma que não houve nenhum erro de JavaScript.
+
+Em desenvolvimento, o canvas usa o runtime da TV **direto** de `app/src/main/assets/web`, sempre atualizado. Só o build copia os arquivos para `public/runtime`.
+
+Quando uma mudança deixa o layout inválido, o Studio avisa na hora. O canvas continua mostrando a última versão válida até a correção, e os erros aparecem na barra de baixo.
 
 ## Estrutura
 
@@ -121,6 +127,7 @@ studio/
 
 ## Limitações desta fase
 
+- **Auto layout no container:** um container com auto layout que está solto na tela (absoluto) tem tamanho fixo. O "Hug" do próprio container ainda não existe, só o dos filhos.
 - **Só a tela inicial é editável.** As outras telas entram com a Fase 5, junto com o suporte no runtime da TV.
 - **Publicar** e **Dispositivo** ficam desativados até as Fases 7 (ADB) e 8 (internet). Use **Exportar → Pacote (.fmtv)** e a CLI.
 - O teste ponta a ponta roda no Chrome; o app desktop usa o WebView2, que é do mesmo motor, mas não tem teste automático próprio.

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Draft } from 'immer';
 import { E } from '../engine';
 import { useEditor, selectRoot, relRect } from '../store/editor';
@@ -110,46 +110,109 @@ function LayoutSection({ node }: { node: LayoutNode }) {
     const L = node.layout || {};
     const set = (key: string, fn: (l: NonNullable<LayoutNode['layout']>) => void) =>
         s.updateNode(node.id, (n) => { n.layout = n.layout || {}; fn(n.layout); }, 'layout.' + key);
-    const pad = Array.isArray(L.padding) ? L.padding : [L.padding, L.padding, L.padding, L.padding];
     const isStack = node.type === 'stack';
+    const horizontal = L.direction !== 'vertical';
+    const pad = Array.isArray(L.padding) ? L.padding : [L.padding ?? 0, L.padding ?? 0, L.padding ?? 0, L.padding ?? 0];
+    const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+    const [sides, setSides] = useState(Array.isArray(L.padding) && !(pad[0] === pad[2] && pad[1] === pad[3]));
+    const setPad = (next: (number | string)[]) => set('padding', (l) => {
+        if (next.every((x) => x === next[0])) { if (!next[0]) delete l.padding; else l.padding = next[0]; } else l.padding = next;
+    });
+    const auto = isStack && L.justify === 'space-between';
+
+    if (!isStack) {
+        return (
+            <Section title="Auto layout" actions={<button className="icon-btn" title="Adicionar auto layout (Shift+A)" onClick={() => s.addAutoLayout(node.id)}><I.Plus size={14} /></button>}>
+                <p className="panel-note">Container livre: os filhos ficam onde você colocar. Adicione auto layout (Shift+A) para que se organizem sozinhos; direção, espaçamento e padding são calculados das posições atuais.</p>
+                <button className="btn" onClick={() => s.addAutoLayout(node.id)}><I.StackV size={14} /> Adicionar auto layout</button>
+                <Row label="Cortar conteúdo"><Toggle value={!!L.clip} onChange={(v) => set('clip', (l) => { if (v) l.clip = true; else delete l.clip; })} /></Row>
+            </Section>
+        );
+    }
+
     return (
-        <Section title={isStack ? 'Auto layout' : 'Container absoluto'}>
-            {isStack && (
-                <>
-                    <Row label="Direção">
-                        <Segmented value={L.direction || 'horizontal'} onChange={(v) => set('direction', (l) => { l.direction = v; })}
-                            options={[{ value: 'horizontal', icon: <I.StackH size={14} />, title: 'Horizontal' }, { value: 'vertical', icon: <I.StackV size={14} />, title: 'Vertical' }]} />
-                    </Row>
-                    <Row label="Gap"><TokenNumberField group="spacing" value={L.gap} min={0} max={400} suffix="px" onChange={(v) => set('gap', (l) => { if (v === undefined) delete l.gap; else l.gap = v; })} /></Row>
-                    <Row label="Alinhar">
-                        <Select value={L.align || 'start'} onChange={(v) => set('align', (l) => { l.align = v; })}
-                            options={[{ value: 'start', label: 'Início' }, { value: 'center', label: 'Centro' }, { value: 'end', label: 'Fim' }, { value: 'stretch', label: 'Esticar' }, { value: 'baseline', label: 'Linha de base' }]} />
-                    </Row>
-                    <Row label="Distribuir">
-                        <Select value={L.justify || 'start'} onChange={(v) => set('justify', (l) => { l.justify = v; })}
-                            options={[{ value: 'start', label: 'Início' }, { value: 'center', label: 'Centro' }, { value: 'end', label: 'Fim' },
-                                { value: 'space-between', label: 'Espaço entre' }, { value: 'space-around', label: 'Espaço ao redor' }, { value: 'space-evenly', label: 'Espaço igual' }]} />
-                    </Row>
-                    <Row label="Quebrar linha"><Toggle value={!!L.wrap} onChange={(v) => set('wrap', (l) => { if (v) l.wrap = true; else delete l.wrap; })} /></Row>
-                </>
-            )}
-            <Row label="Padding" hint="cima, direita, baixo, esquerda">
-                <span className="quad">
-                    {[0, 1, 2, 3].map((i) => (
-                        <NumberField key={i} value={typeof pad[i] === 'number' ? pad[i] as number : undefined} min={0} max={1000}
-                            placeholder={['↑', '→', '↓', '←'][i]}
-                            onChange={(v) => set('padding', (l) => {
-                                const cur = Array.isArray(l.padding) ? [...l.padding] : [l.padding ?? 0, l.padding ?? 0, l.padding ?? 0, l.padding ?? 0];
-                                cur[i] = v ?? 0;
-                                if (cur.every((x) => x === cur[0])) { if (cur[0] === 0) delete l.padding; else l.padding = cur[0]; } else l.padding = cur;
-                            })} />
-                    ))}
-                </span>
+        <Section title="Auto layout" actions={<button className="icon-btn" title="Remover auto layout" onClick={() => s.removeAutoLayout(node.id)}><I.Minus size={14} /></button>}>
+            <div className="al-row">
+                <Segmented value={L.wrap ? 'wrap' : (L.direction || 'horizontal')} onChange={(v) => set('direction', (l) => {
+                    if (v === 'wrap') { l.direction = 'horizontal'; l.wrap = true; } else { l.direction = v as 'horizontal' | 'vertical'; delete l.wrap; }
+                })} options={[
+                    { value: 'vertical', icon: <I.ArrowDown size={14} />, title: 'Vertical' },
+                    { value: 'horizontal', icon: <I.ArrowRight size={14} />, title: 'Horizontal' },
+                    { value: 'wrap', icon: <I.Wrap size={14} />, title: 'Quebrar linha' },
+                ]} />
+            </div>
+            <div className="al-main">
+                <AlignGrid horizontal={horizontal} justify={L.justify || 'start'} align={L.align || 'start'}
+                    onChange={(justify, align) => set('align', (l) => { l.justify = justify; l.align = align; })} />
+                <div className="al-fields">
+                    <label className="al-field" title={horizontal ? 'Espaço entre os itens (horizontal)' : 'Espaço entre os itens (vertical)'}>
+                        {horizontal ? <I.GapH size={14} /> : <I.GapV size={14} />}
+                        {auto
+                            ? <span className="al-auto">Auto</span>
+                            : <TokenNumberField group="spacing" value={L.gap} min={0} max={2000} onChange={(v) => set('gap', (l) => { if (v === undefined) delete l.gap; else l.gap = v; })} />}
+                        <button className={'al-auto-btn' + (auto ? ' on' : '')} title="Espaçamento automático: distribui os itens com o espaço que sobra"
+                            onClick={(e) => { e.preventDefault(); set('justify', (l) => { l.justify = auto ? 'start' : 'space-between'; }); }}>Auto</button>
+                    </label>
+                    {!sides ? (
+                        <div className="al-pads">
+                            <label className="al-field" title="Padding horizontal (esquerda e direita)"><I.PadH size={14} />
+                                <NumberField value={num(pad[1])} min={0} max={2000} placeholder="0" onChange={(v) => setPad([pad[0], v ?? 0, pad[2], v ?? 0])} /></label>
+                            <label className="al-field" title="Padding vertical (cima e baixo)"><I.PadV size={14} />
+                                <NumberField value={num(pad[0])} min={0} max={2000} placeholder="0" onChange={(v) => setPad([v ?? 0, pad[1], v ?? 0, pad[3]])} /></label>
+                        </div>
+                    ) : (
+                        <div className="quad">
+                            {[0, 1, 2, 3].map((i) => (
+                                <NumberField key={i} value={num(pad[i])} min={0} max={2000} placeholder={['↑', '→', '↓', '←'][i]}
+                                    onChange={(v) => { const next = [...pad] as (number | string)[]; next[i] = v ?? 0; setPad(next); }} />
+                            ))}
+                        </div>
+                    )}
+                    <button className="al-link" onClick={(e) => { e.preventDefault(); setSides(!sides); }}>{sides ? 'Padding por eixo' : 'Padding por lado'}</button>
+                </div>
+            </div>
+            <Row label="Esticar filhos" hint="Os filhos ocupam toda a altura (stack horizontal) ou largura (vertical)">
+                <Toggle value={L.align === 'stretch'} onChange={(v) => set('stretch', (l) => { l.align = v ? 'stretch' : 'start'; })} />
             </Row>
+            {horizontal && (
+                <Row label="Linha de base" hint="Alinha os textos pela linha de base">
+                    <Toggle value={L.align === 'baseline'} onChange={(v) => set('baseline', (l) => { l.align = v ? 'baseline' : 'start'; })} />
+                </Row>
+            )}
             <Row label="Cortar conteúdo"><Toggle value={!!L.clip} onChange={(v) => set('clip', (l) => { if (v) l.clip = true; else delete l.clip; })} /></Row>
+            <p className="panel-note">Nos filhos: "Ignorar auto layout" em Posição; Fixo, Hug ou Fill em Tamanho. Shift+A agrupa a seleção numa stack.</p>
         </Section>
     );
 }
+
+type Justify = NonNullable<LayoutNode['layout']>['justify'];
+type Align = NonNullable<LayoutNode['layout']>['align'];
+
+/** 3x3 alignment picker: rows/columns map to the main and cross axes, like design tools. */
+function AlignGrid({ horizontal, justify, align, onChange }: {
+    horizontal: boolean; justify: Justify; align: Align; onChange: (justify: Justify, align: Align) => void;
+}) {
+    const spaced = justify === 'space-between' || justify === 'space-around' || justify === 'space-evenly';
+    const pos = ['start', 'center', 'end'] as const;
+    const cross = align === 'center' || align === 'end' ? align : 'start';
+    return (
+        <div className={'align-grid' + (horizontal ? ' h' : ' v')} role="grid" aria-label="Alinhamento">
+            {pos.map((row) => pos.map((col) => {
+                // Horizontal stack: columns = main axis, rows = cross axis. Vertical: the opposite.
+                const main = horizontal ? col : row;
+                const crs = horizontal ? row : col;
+                const active = crs === cross && (spaced || main === justify);
+                return (
+                    <button key={row + col} className={'ag-cell' + (active ? ' on' : '')} title={`${horizontal ? 'Horizontal' : 'Vertical'}: ${LBL[main]} · cruzado: ${LBL[crs]}`}
+                        onClick={(e) => { e.preventDefault(); onChange(spaced ? justify : main, crs); }}>
+                        {active ? <span className="ag-bars"><i /><i /><i /></span> : <span className="ag-dot" />}
+                    </button>
+                );
+            }))}
+        </div>
+    );
+}
+const LBL: Record<string, string> = { start: 'início', center: 'centro', end: 'fim' };
 
 /* ---------------- Position ---------------- */
 
@@ -175,9 +238,8 @@ function PositionSection({ node, parent, absolute, inStack }: { node: LayoutNode
     return (
         <Section title="Posição">
             {inStack && (
-                <Row label="Modo" hint="No fluxo: a stack posiciona. Absoluto: posição livre dentro da stack.">
-                    <Segmented value={absolute ? 'absolute' : 'flow'} onChange={(v) => s.setPositionMode(node.id, v)}
-                        options={[{ value: 'flow', label: 'No fluxo' }, { value: 'absolute', label: 'Absoluto' }]} />
+                <Row label="Ignorar auto layout" hint="Ligado: o elemento sai do fluxo da stack e fica numa posição livre, por cima dos outros.">
+                    <Toggle value={absolute} onChange={(v) => s.setPositionMode(node.id, v ? 'absolute' : 'flow')} />
                 </Row>
             )}
             {absolute && node.constraints && (
@@ -223,7 +285,7 @@ function DimField({ dim, onChange, horizontalAxis }: { dim: Dim | undefined; onC
     return (
         <span className="dim-field">
             <Select value={mode} onChange={(m) => onChange(m === 'hug' ? undefined : m === 'fill' ? { mode: 'fill' } : { mode: m, value: m === 'percent' ? 50 : (dim && 'value' in dim ? dim.value : 200) } as Dim)}
-                options={[{ value: 'hug', label: 'Ajustar ao conteúdo' }, { value: 'fill', label: horizontalAxis ? 'Preencher' : 'Preencher' }, { value: 'fixed', label: 'Fixo' }, { value: 'percent', label: 'Percentual' }]} />
+                options={[{ value: 'fixed', label: 'Fixo' }, { value: 'hug', label: 'Hug (ajustar ao conteúdo)' }, { value: 'fill', label: horizontalAxis ? 'Fill (preencher largura)' : 'Fill (preencher altura)' }, { value: 'percent', label: 'Percentual' }]} />
             {(mode === 'fixed' || mode === 'percent') && dim && 'value' in dim && (
                 <NumberField value={dim.value} min={0} max={mode === 'percent' ? 100 : 8000} suffix={mode === 'percent' ? '%' : 'px'}
                     onChange={(v) => onChange({ mode, value: v ?? 0 } as Dim)} />
@@ -239,7 +301,7 @@ function SizeSection({ node, parent }: { node: LayoutNode; parent: LayoutNode })
         s.updateNode(node.id, (n) => { n.size = n.size || {}; fn(n.size); if (!Object.keys(n.size).length) delete n.size; }, 'size.' + key);
     const horizontal = parent.type === 'stack' && parent.layout?.direction !== 'vertical';
     return (
-        <Section title="Tamanho">
+        <Section title="Redimensionamento">
             <Row label="Largura"><DimField horizontalAxis dim={size.width} onChange={(d) => set('width', (sz) => { if (d) sz.width = d; else delete sz.width; })} /></Row>
             <Row label="Altura"><DimField horizontalAxis={false} dim={size.height} onChange={(d) => set('height', (sz) => { if (d) sz.height = d; else delete sz.height; })} /></Row>
             <div className="xywh">
@@ -380,8 +442,22 @@ function DataSection({ node }: { node: LayoutNode }) {
                         </span>
                     </Row>
                 );
-                if (spec.type === 'number') return <Row key={k} label={{ thickness: 'Espessura' }[k] || k}><NumberField value={p[k] ?? (spec.def as number)} min={spec.min} max={spec.max} onChange={(v) => setProp(k, v ?? spec.def)} /></Row>;
-                if (spec.type === 'enum') return <Row key={k} label={{ fit: 'Encaixe', format: 'Formato' }[k] || k}><Select value={p[k] ?? spec.def} options={spec.values!.map((v) => ({ value: v, label: ENUM_LABEL[v] || v }))} onChange={(v) => setProp(k, v)} /></Row>;
+                if (spec.type === 'number') return <Row key={k} label={PROP_LABEL[k] || k}><NumberField value={p[k] ?? (spec.def as number)} min={spec.min} max={spec.max} step={k === 'strokeWidth' ? 0.5 : 1} onChange={(v) => setProp(k, v ?? spec.def)} /></Row>;
+                if (spec.type === 'boolean') return <Row key={k} label={PROP_LABEL[k] || k}><Toggle value={p[k] ?? (spec.def as boolean)} onChange={(v) => setProp(k, v)} /></Row>;
+                if (spec.type === 'enum' && node.type === 'icon' && k === 'name') return (
+                    <div key={k} className="prop-row" style={{ gridTemplateColumns: '1fr' }}>
+                        <span className="prop-label">Ícone</span>
+                        <div className="icon-picker" role="radiogroup">
+                            {spec.values!.map((name) => (
+                                <button key={name} role="radio" aria-checked={(p[k] ?? spec.def) === name} title={name}
+                                    className={(p[k] ?? spec.def) === name ? 'on' : ''} onClick={() => setProp(k, name)}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={E.ICONS[name]} /></svg>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+                if (spec.type === 'enum') return <Row key={k} label={PROP_LABEL[k] || k}><Select value={p[k] ?? spec.def} options={spec.values!.map((v) => ({ value: v, label: ENUM_LABEL[v] || v }))} onChange={(v) => setProp(k, v)} /></Row>;
                 if (spec.type === 'color') return <Row key={k} label="Cor"><ColorField value={p[k] ?? (spec.def as string)} onChange={(v) => v && setProp(k, v)} /></Row>;
                 if (spec.type === 'asset') return <Row key={k} label="Imagem"><Select value={p[k]} placeholder="Escolha…" options={assets.map((a) => ({ value: a.id, label: a.file }))} onChange={(v) => setProp(k, v)} /></Row>;
                 if (spec.type === 'action') {
@@ -400,7 +476,16 @@ function DataSection({ node }: { node: LayoutNode }) {
     );
 }
 
-const ENUM_LABEL: Record<string, string> = { cover: 'Cobrir', contain: 'Conter', fill: 'Esticar', auto: 'Do launcher', '24h': '24 horas', '12h': '12 horas' };
+const ENUM_LABEL: Record<string, string> = {
+    cover: 'Cobrir', contain: 'Conter', fill: 'Esticar', auto: 'Do launcher', '24h': '24 horas', '12h': '12 horas',
+    movies: 'Filmes em alta', shows: 'Séries em alta', apps: 'Apps instalados', favorites: 'Apps favoritos',
+    poster: 'Pôster (vertical)', wide: 'Paisagem', app: 'App (logo)',
+};
+const PROP_LABEL: Record<string, string> = {
+    thickness: 'Espessura', fit: 'Encaixe', format: 'Formato', source: 'Conteúdo', cardStyle: 'Cartão', maxItems: 'Máx. de itens',
+    showTitles: 'Mostrar títulos', columns: 'Colunas', rotateSeconds: 'Trocar a cada (s)', buttonLabel: 'Texto do botão',
+    hours: 'Próximas horas', showSun: 'Nascer e pôr do sol', opensDrawer: 'OK abre o clima', color: 'Cor', strokeWidth: 'Traço',
+};
 
 /* ---------------- Focus ---------------- */
 

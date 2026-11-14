@@ -159,6 +159,59 @@ try {
     await key('Delete', 'Delete', 0, 46);
     check('Delete remove o elemento', !(await node(sel)));
 
+    // 9b. Toolbar "stack" button creates a visible empty stack
+    const clickEl = async (selector, text) => {
+        const p = await evaluate(`(() => { const all = Array.from(document.querySelectorAll(${JSON.stringify(selector)})); const b = ${text ? `all.find(e => e.textContent.trim() === ${JSON.stringify(text)})` : 'all[0]'}; if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+        if (!p) throw new Error('não achei ' + selector + ' ' + (text || ''));
+        await mouse('mouseMoved', p.x, p.y, 0); await mouse('mousePressed', p.x, p.y); await mouse('mouseReleased', p.x, p.y, 0);
+        await sleep(400);
+    };
+    await evaluate(`${S}.select([])`);
+    await clickEl('button[title^="Stack vertical"]');
+    const newStack = (await evaluate(`${S}.selection`))[0];
+    const ns = await node(newStack);
+    check('botão de stack da barra cria uma stack vertical', ns && ns.node.type === 'stack' && ns.node.layout.direction === 'vertical', JSON.stringify(ns));
+    await sleep(300);
+    check('stack vazia aparece com contorno no canvas', (await evaluate(`document.querySelectorAll('.ov-empty').length`)) >= 1);
+
+    // 9c. Auto layout grid: bottom-right cell = end/end for a vertical stack
+    await clickEl('.align-grid .ag-cell:last-child');
+    const lay = (await node(newStack)).node.layout;
+    check('grade 3×3 define alinhamento nos dois eixos', lay.justify === 'end' && lay.align === 'end', JSON.stringify(lay));
+    await clickEl('.al-auto-btn');
+    check('"Auto" distribui com espaço entre', (await node(newStack)).node.layout.justify === 'space-between');
+
+    // 9d. Remove / add auto layout keeps children in place
+    await evaluate(`${S}.select(['shortcuts'])`);
+    await sleep(300);
+    const posBefore = await evaluate(`[${S}.rects['btn-settings']].map(r => Math.round(r.x) + ',' + Math.round(r.y))[0]`);
+    await clickEl('.prop-section button[title="Remover auto layout"]');
+    await sleep(500);
+    const asFrame = await node('shortcuts');
+    const posAfter = await evaluate(`[${S}.rects['btn-settings']].map(r => Math.round(r.x) + ',' + Math.round(r.y))[0]`);
+    check('remover auto layout mantém os elementos no lugar', asFrame.node.type === 'frame' && posBefore === posAfter, posBefore + ' -> ' + posAfter);
+    await key('A', 'KeyA', 8, 65); // Shift+A
+    await sleep(500);
+    check('Shift+A devolve o auto layout', (await node('shortcuts')).node.type === 'stack', JSON.stringify((await node('shortcuts')).node.type));
+
+    // 9e. Insert a ready-made block and see real content in the TV runtime
+    await evaluate(`${S}.select([]); ${S}.setLeftTab('components')`);
+    await sleep(300);
+    await clickEl('.block-item .block-name', 'Séries em alta');
+    const blockId = (await evaluate(`${S}.selection`))[0];
+    let cards = 0;
+    for (let i = 0; i < 30 && !cards; i++) {
+        cards = await evaluate(`(() => { const d = document.querySelector('iframe').contentDocument; const el = d.querySelector('[data-fmtv-id="${blockId}"]'); return el ? el.querySelectorAll('.fmtv-card').length : 0; })()`);
+        if (!cards) await sleep(200);
+    }
+    check('bloco "Séries em alta" mostra cartões no canvas', cards > 0, String(cards));
+
+    // 9f. Save as block
+    await evaluate(`${S}.select(['btn-settings'])`);
+    await evaluate(`${S}.saveSelectionAsBlock()`);
+    await sleep(300);
+    check('"Salvar como bloco" aparece em Meus blocos', (await evaluate(`Array.from(document.querySelectorAll('.block-item .block-name')).some(e => e.textContent === 'Botão')`)) || (await evaluate(`(${S}.project.blocks || []).length`)) === 1);
+
     // 10. Validation stays clean
     check('o documento continua válido', (await evaluate(`${S}.validation.errors.length`)) === 0, JSON.stringify(await evaluate(`${S}.validation.errors`)));
 
@@ -181,10 +234,41 @@ try {
     check('Esc volta para a edição', (await evaluate(`${S}.mode`)) === 'edit');
 
     if (SHOT) {
+        await evaluate(`${S}.setLeftTab('components'); ${S}.select(['shortcuts'])`);
+        await sleep(600);
+        const shot0 = await send('Page.captureScreenshot', { format: 'png' });
+        writeFileSync(SHOT.replace(/\.png$/, '-autolayout.png'), Buffer.from(shot0.data, 'base64'));
         await evaluate(`${S}.setLeftTab('layers'); ${S}.select(['shortcuts'])`);
         await sleep(500);
         const shot = await send('Page.captureScreenshot', { format: 'png' });
         writeFileSync(SHOT, Buffer.from(shot.data, 'base64'));
+    }
+
+    // Reported case: blank template, select the screen, Shift+A, then "bottom centre" in the grid.
+    console.log('\n[Studio e2e: modelo Em branco + auto layout na Tela]');
+    await evaluate(`${S}.load(${S}.project, 'x'); __fmtvStudio.setState({ dirty: false })`);
+    await send('Page.navigate', { url: `${BASE}/?template=blank&select=root` });
+    await waitFor(`window.__fmtvStudio && ${S}.project.layout.name === 'Novo layout' && !!${S}.rects['apps'] && !!${S}.rects['customize']`);
+    await sleep(500);
+    await evaluate(`${S}.select(['root']); document.activeElement && document.activeElement.blur()`);
+    await key('A', 'KeyA', 8, 65); // Shift+A
+    await sleep(600);
+    const scr = (await node('root')).node;
+    check('Shift+A na Tela cria stack vertical (botão em cima, prateleira embaixo)', scr.type === 'stack' && scr.layout.direction === 'vertical'
+        && JSON.stringify(scr.children.map((c) => c.id)) === '["customize","apps"]', JSON.stringify(scr.layout) + ' ' + JSON.stringify(scr.children.map((c) => c.id)));
+    check('a prateleira esticada vira Fill', JSON.stringify(scr.children[1].size.width) === '{"mode":"fill"}', JSON.stringify(scr.children[1].size));
+    const cell = await evaluate(`(() => { const c = document.querySelectorAll('.align-grid .ag-cell')[7]; c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await mouse('mouseMoved', cell.x, cell.y, 0); await mouse('mousePressed', cell.x, cell.y); await mouse('mouseReleased', cell.x, cell.y, 0);
+    await sleep(900);
+    const al = (await node('root')).node.layout;
+    check('"inferior centro" = conteúdo no fim do eixo vertical, centralizado na horizontal', al.justify === 'end' && al.align === 'center', JSON.stringify(al));
+    const ra = await rect('apps'), rc = await rect('customize');
+    check('prateleira inteira dentro da tela', ra.x >= 0 && ra.x + ra.w <= 1920 && ra.y + ra.h <= 1080, JSON.stringify(ra));
+    check('botão centralizado na horizontal', Math.abs(rc.x + rc.w / 2 - 960) <= 2, JSON.stringify(rc));
+    check('conteúdo encostado embaixo (respeitando o padding)', Math.abs(1080 - (ra.y + ra.h) - 260) <= 2, JSON.stringify(ra));
+    if (SHOT) {
+        const shot = await send('Page.captureScreenshot', { format: 'png' });
+        writeFileSync(SHOT.replace(/\.png$/, '-tela-autolayout.png'), Buffer.from(shot.data, 'base64'));
     }
 } catch (e) {
     check('execução', false, e.stack || String(e));

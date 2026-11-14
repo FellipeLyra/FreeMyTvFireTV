@@ -12,6 +12,7 @@ beforeEach(() => {
     s().load(newProject(blankLayout('Teste')), 'Teste');
     // Rectangles as the canvas would measure them for the blank layout.
     s().setRects({ root: { x: 0, y: 0, w: 1920, h: 1080 }, apps: { x: 54, y: 520, w: 1812, h: 300 }, customize: { x: 1676, y: 40, w: 190, h: 50 } });
+    useEditor.setState({ toasts: [] });
 });
 
 describe('history', () => {
@@ -128,5 +129,54 @@ describe('files', () => {
         expect(res.layout!.assets!.map((a) => a.id)).toEqual(['pic']);
         expect(res.layout!.assets![0].bytes).toBe(5);
         expect(res.layout!.assets![0].sha256).toBe('2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
+    });
+});
+
+describe('stacks and blocks', () => {
+    it('createStack adds an empty stack, or wraps the selection', () => {
+        s().select([]);
+        s().createStack('vertical');
+        const id = s().selection[0];
+        expect(T.find(root(), id)!.node.layout!.direction).toBe('vertical');
+        s().select(['customize']);
+        s().createStack('horizontal');
+        const wrapped = T.find(root(), 'customize')!;
+        expect(wrapped.parent!.type).toBe('stack');
+        expect(wrapped.parent!.layout!.direction).toBe('horizontal');
+    });
+    it('Shift+A on a free container adds auto layout', () => {
+        s().setRects({ ...s().rects });
+        s().select(['root']);
+        s().toggleAutoLayout();
+        expect(root().type).toBe('stack');
+        s().undo();
+        expect(root().type).toBe('frame');
+    });
+    it('inserts built-in blocks with fresh ids and valid content', async () => {
+        const { BUILTIN_BLOCKS } = await import('../src/model/blocks');
+        for (const b of BUILTIN_BLOCKS) {
+            s().select([]);
+            const id = s().insertBlock(b);
+            expect(id, b.id).toBeTruthy();
+        }
+        const v = E.validate(s().project.layout);
+        expect(v.errors).toEqual([]);
+        // Backgrounds go behind everything and cover the screen.
+        expect(root().children![0].constraints).toEqual({ h: { anchor: 'stretch', start: 0, end: 0 }, v: { anchor: 'stretch', start: 0, end: 0 } });
+    });
+    it('saves the selection as a reusable block stored in the project', () => {
+        const id = s().addNode('button')!;
+        s().select([id]);
+        s().saveSelectionAsBlock();
+        const blocks = s().project.blocks!;
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].node.constraints).toBeUndefined();
+        expect(blocks[0].node.size!.width).toEqual({ mode: 'fixed', value: 220 });
+        const copy = s().insertBlock(blocks[0])!;
+        expect(copy).not.toBe(id);
+        expect(parseProject(serializeProject(s().project)).blocks).toHaveLength(1);
+        s().select(['apps']);
+        s().saveSelectionAsBlock();
+        expect(s().project.blocks).toHaveLength(1); // launcher widgets cannot become blocks
     });
 });

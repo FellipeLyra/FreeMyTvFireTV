@@ -277,6 +277,97 @@ export function unwrap(root: LayoutNode, id: string, rects: Record<string, Rect>
 }
 
 /* ------------------------------------------------------------------ */
+/* Auto layout on / off (like Shift+A in design tools)                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Direction suggested by the arrangement: elements that share a column (one above
+ * the other) make a vertical stack, elements that share a row a horizontal one.
+ * Only when that is undecided does the overall spread decide.
+ */
+export function guessDirection(rects: Rect[]): 'horizontal' | 'vertical' {
+    if (rects.length < 2) return 'vertical';
+    let column = 0, row = 0;
+    for (let i = 0; i < rects.length; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+            const a = rects[i], b = rects[j];
+            if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0) column++;
+            if (Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0) row++;
+        }
+    }
+    if (column !== row) return column > row ? 'vertical' : 'horizontal';
+    const xs = rects.map((r) => r.x + r.w / 2), ys = rects.map((r) => r.y + r.h / 2);
+    const spread = (v: number[]) => Math.max(...v) - Math.min(...v);
+    return spread(xs) >= spread(ys) ? 'horizontal' : 'vertical';
+}
+
+/**
+ * Turn a container with free (absolute) children into a stack, keeping the look:
+ * children are ordered by position, and gap/padding are measured from where they are.
+ * `rects` are the children's rectangles relative to the container.
+ */
+export function addAutoLayout(node: LayoutNode, rects: Record<string, Rect>, size: { w: number; h: number }) {
+    if (node.type !== 'frame') throw new Error('este elemento já tem auto layout');
+    const kids = node.children || [];
+    const measured = kids.filter((k) => rects[k.id]);
+    const direction = guessDirection(measured.map((k) => rects[k.id]));
+    const horizontal = direction === 'horizontal';
+    const ordered = [...kids].sort((a, b) => {
+        const ra = rects[a.id], rb = rects[b.id];
+        if (!ra || !rb) return 0;
+        return horizontal ? ra.x - rb.x : ra.y - rb.y;
+    });
+    let gap = 16;
+    const gaps: number[] = [];
+    for (let i = 1; i < ordered.length; i++) {
+        const a = rects[ordered[i - 1].id], b = rects[ordered[i].id];
+        if (a && b) gaps.push(horizontal ? b.x - (a.x + a.w) : b.y - (a.y + a.h));
+    }
+    if (gaps.length) gap = Math.min(2000, Math.max(0, Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length)));
+    let padding: number | number[] = 0;
+    if (measured.length) {
+        const rs = measured.map((k) => rects[k.id]);
+        const top = Math.max(0, Math.round(Math.min(...rs.map((r) => r.y))));
+        const left = Math.max(0, Math.round(Math.min(...rs.map((r) => r.x))));
+        const right = Math.max(0, Math.round(size.w - Math.max(...rs.map((r) => r.x + r.w))));
+        const bottom = Math.max(0, Math.round(size.h - Math.max(...rs.map((r) => r.y + r.h))));
+        padding = top === right && right === bottom && bottom === left ? top : [top, right, bottom, left];
+    }
+    node.type = 'stack';
+    node.layout = { ...(node.layout?.clip ? { clip: true } : {}), direction, gap, align: 'start', ...(padding ? { padding } : {}) };
+    node.children = ordered;
+    for (const k of ordered) {
+        if (k.position === 'absolute') continue; // already "ignoring auto layout"
+        const c = k.constraints;
+        makeFlow(k, rects[k.id] || null);
+        // What stretched with the container keeps doing so: "Fill" (scale becomes a percentage).
+        if (c && k.size) {
+            if (c.h.anchor === 'stretch') k.size.width = { mode: 'fill' };
+            if (c.v.anchor === 'stretch') k.size.height = { mode: 'fill' };
+            if (c.h.anchor === 'scale') k.size.width = { mode: 'percent', value: c.h.size };
+            if (c.v.anchor === 'scale') k.size.height = { mode: 'percent', value: c.v.size };
+        }
+    }
+}
+
+/** Turn a stack into a free container, every child staying where it is. */
+export function removeAutoLayout(node: LayoutNode, rects: Record<string, Rect>, size: { w: number; h: number }) {
+    if (node.type !== 'stack') throw new Error('este elemento não tem auto layout');
+    node.type = 'frame';
+    node.layout = node.layout?.clip ? { clip: true } : undefined;
+    if (!node.layout) delete node.layout;
+    for (const k of node.children || []) {
+        const r = rects[k.id];
+        delete k.position;
+        if (r) {
+            dropFlowSize(k);
+            delete k.constraints;
+            placeAbsolute(k, r, size);
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Alignment                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -325,7 +416,8 @@ export function distributeRects(rects: Rect[], axis: 'h' | 'v'): Rect[] {
 
 const LABELS: Record<string, string> = {
     stack: 'Stack', frame: 'Container', text: 'Texto', image: 'Imagem', spacer: 'Espaçador',
-    divider: 'Divisor', button: 'Botão', 'clock-text': 'Relógio',
+    divider: 'Divisor', button: 'Botão', 'clock-text': 'Relógio', icon: 'Ícone',
+    'content-row': 'Carrossel', 'content-grid': 'Grade', banner: 'Banner', 'weather-full': 'Clima completo',
 };
 
 /** A new node of `type` with the registry defaults and sensible editor sizes. */
@@ -365,6 +457,21 @@ export function createNode(type: string, taken: Set<string>, opts: { horizontalP
             break;
         case 'clock-text':
             node.text = { size: 96, weight: 200 };
+            break;
+        case 'icon':
+            node.size = { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } };
+            break;
+        case 'content-row':
+            node.size = { width: { mode: 'fixed', value: 1600 }, height: { mode: 'fixed', value: 380 } };
+            break;
+        case 'content-grid':
+            node.size = { width: { mode: 'fixed', value: 1300 }, height: { mode: 'fixed', value: 480 } };
+            break;
+        case 'banner':
+            node.size = { width: { mode: 'fixed', value: 1200 }, height: { mode: 'fixed', value: 400 } };
+            break;
+        case 'weather-full':
+            node.size = { width: { mode: 'fixed', value: 580 }, height: { mode: 'fixed', value: 380 } };
             break;
     }
     return node;

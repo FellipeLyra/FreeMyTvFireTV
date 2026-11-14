@@ -132,14 +132,37 @@ def main():
         for line in html.split("\n")
     )
 
+    # Layout content blocks (carousels, grids, banners) reuse the trending service for
+    # both movies and shows. fetchTrendingPicks(tab, sink) fetches one tab and hands
+    # the items to `sink` instead of the trending row; every result is also offered
+    # to window.FMTVData so the runtime always has the latest picks.
+    html = patch(html, "        function fetchTrendingPicks() {\n            var badge = document.getElementById('picksSourceBadge');\n            var tab = state.picksTab;\n            var tmdbMediaPath = tab === 'shows' ? 'tv' : 'movie';\n",
+                 "        function fetchTrendingPicks(forTab, sink) {\n            var badge = document.getElementById('picksSourceBadge');\n            var tab = forTab || state.picksTab;\n            var tmdbMediaPath = tab === 'shows' ? 'tv' : 'movie';\n"
+                 "            function isCurrent() { return !!sink || tab === state.picksTab; }\n"
+                 "            function deliver(items, source) {\n"
+                 "                if (window.FMTVData) window.FMTVData.picks(tab, items, source);\n"
+                 "                if (sink) { sink(items, source); return; }\n"
+                 "                badge.textContent = source;\n"
+                 "                renderPicks(items);\n"
+                 "            }\n")
+    html = patch(html, "if (tab !== state.picksTab) return;", "if (!isCurrent()) return;", count=2)
+    html = patch(html, "tab === state.picksTab)", "isCurrent())", count=2)
+    html = patch(html, "                badge.textContent = t('Curated Picks');\n                renderPicks(tab === 'shows' ? FALLBACK_SHOWS : FALLBACK_MOVIES);",
+                 "                deliver(tab === 'shows' ? FALLBACK_SHOWS : FALLBACK_MOVIES, t('Curated Picks'));")
+    html = patch(html, "                            badge.textContent = t('TMDB Live');\n                            renderPicks(items);",
+                 "                            deliver(items, t('TMDB Live'));")
+    html = patch(html, "if (linked) renderPicks(items);", "if (linked) deliver(items, t('TMDB Live'));")
+    html = patch(html, "                                        badge.textContent = t('Live Popular Feed');\n                                        renderPicks(topShows);",
+                 "                                        deliver(topShows, t('Live Popular Feed'));")
+
     # Layout runtime (this repo's own code in web/fmtv/): loaded after the page's
     # script, so it can reuse the page's widgets and functions.
     html = patch(html, "</body>",
-                 '    <script src="fmtv/engine.js"></script>\n    <script src="fmtv/runtime.js"></script>\n</body>')
+                 '    <script src="fmtv/engine.js"></script>\n    <script src="fmtv/blocks.js"></script>\n    <script src="fmtv/runtime.js"></script>\n</body>')
 
     # Only the files that come from upstream are replaced. firetv-bridge.js and
     # fmtv/ (the layout engine and runtime) belong to this repository and are kept.
-    for own in ("firetv-bridge.js", "fmtv/engine.js", "fmtv/runtime.js"):
+    for own in ("firetv-bridge.js", "fmtv/engine.js", "fmtv/blocks.js", "fmtv/runtime.js"):
         if not (WEB_OUT / own).is_file():
             sys.exit(f"missing app/src/main/assets/web/{own}")
     (WEB_OUT / "index.html").write_text(html, encoding="utf-8", newline="\n")

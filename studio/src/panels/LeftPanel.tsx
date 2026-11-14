@@ -6,6 +6,7 @@ import type { LayoutNode } from '../model/types';
 import { I, iconForType } from '../ui/icons';
 import { bytesToBase64, sha256Hex } from '../lib/bytes';
 import { pickFiles } from '../lib/storage';
+import { BUILTIN_BLOCKS, type Block } from '../model/blocks';
 
 const TABS: { id: LeftTab; label: string; icon: JSX.Element }[] = [
     { id: 'pages', label: 'Páginas', icon: <I.Page /> },
@@ -83,9 +84,11 @@ function Layers() {
         } else if (target.parent) {
             const rect = s.rects[dragId];
             const pr = s.rects[target.parent.id];
-            // Layers list topmost-first, so "before" in the list means after in the children array.
+            // Free containers are listed topmost-first ("before" in the list = later in the array);
+            // stacks are listed in flow order.
+            const inStack = target.parent.type === 'stack';
             s.moveNode(dragId, {
-                parentId: target.parent.id, index: target.index + (drop.pos === 'before' ? 1 : 0),
+                parentId: target.parent.id, index: target.index + (inStack ? (drop.pos === 'after' ? 1 : 0) : (drop.pos === 'before' ? 1 : 0)),
                 rect: target.parent.type === 'frame' && rect && pr ? { x: rect.x - pr.x, y: rect.y - pr.y, w: rect.w, h: rect.h } : undefined,
                 parentSize: pr ? { w: pr.w, h: pr.h } : undefined,
             });
@@ -127,7 +130,9 @@ function LayerRow(props: {
     const def = E.registry[node.type];
     const isCont = !!def?.container;
     const Icon = node.type === 'stack' && node.layout?.direction === 'vertical' ? I.StackV : iconForType(node.type);
-    const kids = [...(node.children || [])].reverse(); // topmost first, like design tools
+    // Stacks list children in flow order (the first in the list comes first on screen);
+    // free containers list them by stacking order (topmost first), like design tools.
+    const kids = node.type === 'stack' ? [...(node.children || [])] : [...(node.children || [])].reverse();
     const open = !collapsed[node.id] || !!query;
     const absolute = T.isAbsolute(node, parent);
     const s = useEditor.getState;
@@ -190,7 +195,7 @@ function LayerRow(props: {
 
 /* ---------------- Components ---------------- */
 
-const CATEGORY_LABEL: Record<string, string> = { layout: 'Layout', basic: 'Básicos', data: 'Dados', launcher: 'Widgets do launcher' };
+const CATEGORY_LABEL: Record<string, string> = { layout: 'Layout', basic: 'Básicos', data: 'Conteúdo e dados', launcher: 'Widgets do launcher' };
 
 function Components() {
     const root = useEditor(selectRoot);
@@ -199,31 +204,80 @@ function Components() {
         E.walk(root, (n) => { set.add(n.type); });
         return set;
     }, [root]);
+    const userBlocks = useEditor((s) => s.project.blocks || []);
+    const [renaming, setRenaming] = useState<string | null>(null);
     const groups: Record<string, string[]> = {};
     for (const [type, def] of Object.entries(E.registry)) (groups[def.category] ||= []).push(type);
+    const s = useEditor.getState;
+    const blockRow = (b: Block, user: boolean) => (
+        <div key={b.id} className="block-item" draggable
+            title={(b.description ? b.description + '. ' : '') + 'Clique para inserir ou arraste para o canvas'}
+            onDragStart={(e) => { e.dataTransfer.setData('application/x-fmtv-block', b.id); e.dataTransfer.effectAllowed = 'copy'; }}
+            onClick={() => renaming !== b.id && s().insertBlock(b)}>
+            {(() => { const Icon = b.fill ? I.Palette : iconForType(b.node.type === 'stack' && b.node.children?.[1] ? b.node.children[1].type : b.node.type); return <Icon size={16} />; })()}
+            <span className="block-text">
+                {renaming === b.id
+                    ? <input autoFocus className="rename" defaultValue={b.name} onClick={(e) => e.stopPropagation()}
+                        onBlur={(e) => { s().renameBlock(b.id, e.target.value); setRenaming(null); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(null); }} />
+                    : <span className="block-name">{b.name}</span>}
+                {b.description && <span className="block-desc">{b.description}</span>}
+            </span>
+            {user && (
+                <span className="layer-actions">
+                    <button title="Renomear" onClick={(e) => { e.stopPropagation(); setRenaming(b.id); }}><I.Edit size={13} /></button>
+                    <button title="Excluir bloco" onClick={(e) => { e.stopPropagation(); s().removeBlock(b.id); }}><I.Trash size={13} /></button>
+                </span>
+            )}
+        </div>
+    );
+    const primitives = (cats: readonly ('layout' | 'basic' | 'data' | 'launcher')[]) => cats.map((cat) => groups[cat] && (
+        <div key={cat} className="comp-group">
+            <h4>{CATEGORY_LABEL[cat]}</h4>
+            <div className="comp-grid">
+                {cat === 'layout' && (['horizontal', 'vertical'] as const).map((dir) => {
+                    const Icon = dir === 'horizontal' ? I.StackH : I.StackV;
+                    return (
+                        <button key={'stack-' + dir} className="comp" draggable
+                            title="Clique para adicionar (com elementos selecionados, agrupa-os) ou arraste para o canvas"
+                            onDragStart={(e) => { e.dataTransfer.setData('application/x-fmtv-component', 'stack'); e.dataTransfer.setData('application/x-fmtv-direction', dir); e.dataTransfer.effectAllowed = 'copy'; }}
+                            onClick={() => useEditor.getState().createStack(dir)}>
+                            <Icon size={20} />
+                            <span>{dir === 'horizontal' ? 'Stack horizontal' : 'Stack vertical'}</span>
+                        </button>
+                    );
+                })}
+                {groups[cat].filter((type) => type !== 'stack').map((type) => {
+                    const def = E.registry[type];
+                    const Icon = iconForType(type);
+                    const taken = !!def.slot && used.has(type);
+                    return (
+                        <button key={type} className={'comp' + (taken ? ' taken' : '')} draggable={!taken} disabled={taken}
+                            title={taken ? 'Já está na tela (cada widget aparece uma vez)' : 'Clique para adicionar ou arraste para o canvas'}
+                            onDragStart={(e) => { e.dataTransfer.setData('application/x-fmtv-component', type); e.dataTransfer.effectAllowed = 'copy'; }}
+                            onClick={() => useEditor.getState().addNode(type)}>
+                            <Icon size={20} />
+                            <span>{def.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    ));
     return (
         <div className="components">
-            {(['layout', 'basic', 'data', 'launcher'] as const).map((cat) => groups[cat] && (
-                <div key={cat} className="comp-group">
-                    <h4>{CATEGORY_LABEL[cat]}</h4>
-                    <div className="comp-grid">
-                        {groups[cat].map((type) => {
-                            const def = E.registry[type];
-                            const Icon = type === 'stack' ? I.StackH : iconForType(type);
-                            const taken = !!def.slot && used.has(type);
-                            return (
-                                <button key={type} className={'comp' + (taken ? ' taken' : '')} draggable={!taken} disabled={taken}
-                                    title={taken ? 'Já está na tela (cada widget aparece uma vez)' : 'Clique para adicionar ou arraste para o canvas'}
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/x-fmtv-component', type); e.dataTransfer.effectAllowed = 'copy'; }}
-                                    onClick={() => useEditor.getState().addNode(type)}>
-                                    <Icon size={20} />
-                                    <span>{def.label}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            ))}
+            {primitives(['layout', 'basic'])}
+            <div className="comp-group">
+                <h4>Blocos prontos</h4>
+                <div className="block-list">{BUILTIN_BLOCKS.map((b) => blockRow(b, false))}</div>
+            </div>
+            <div className="comp-group">
+                <h4>Meus blocos</h4>
+                {userBlocks.length
+                    ? <div className="block-list">{userBlocks.map((b) => blockRow(b, true))}</div>
+                    : <p className="panel-note">Selecione um elemento e use "Salvar como bloco" (botão direito) para reutilizá-lo. Os blocos ficam salvos no projeto.</p>}
+            </div>
+            {primitives(['data', 'launcher'])}
             <p className="panel-note">Os widgets do launcher são os de verdade: clima, apps e filmes funcionam na prévia e na TV.</p>
         </div>
     );

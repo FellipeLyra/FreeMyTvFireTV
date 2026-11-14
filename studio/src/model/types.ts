@@ -140,4 +140,12 @@ export interface Project {
     layout: Layout;
     /** asset id -> base64 file contents */
     assetData: Record<string, string>;
+    /** Reusable blocks saved by the user (inserted as copies). */
+    blocks?: UserBlock[];
+}
+
+export interface UserBlock {
+    id: string;
+    name: string;
+    node: LayoutNode;
 }
