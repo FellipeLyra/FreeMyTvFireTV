@@ -92,6 +92,11 @@ try {
     await evaluate(`window.__ptr = []; ['pointerdown','pointermove','pointerup','gotpointercapture','lostpointercapture','dragstart','pointercancel'].forEach(t => document.addEventListener(t, e => { window.__ptr.push(t + ':' + (e.target.className || e.target.tagName)); if (window.__ptr.length > 40) window.__ptr.shift(); }, true));`);
     console.log('\n[Studio e2e: modelo Cinema]');
 
+    // 0. The launcher's idle screensaver must never cover the canvas while editing
+    await evaluate(`document.querySelector('iframe').contentWindow.enterScreensaver()`);
+    await sleep(1600);
+    check('protetor de tela do launcher não fica sobre o canvas', (await evaluate(`document.querySelector('iframe').contentWindow.screensaverOn`)) === false);
+
     // 1. Click selects
     const clock0 = await rect('big-clock');
     const c0 = await screen(clock0.x + 60, clock0.y + clock0.h / 2);

@@ -101,6 +101,24 @@ export function Canvas() {
         return () => clearTimeout(t);
     }, [ready, project, page, measure]);
 
+    // The launcher page starts its OLED screensaver after 3 idle minutes. Inside the editor
+    // the page never sees a key press, so keep it "in use" and close the screensaver if it
+    // opened (except when the screensaver itself is the screen being edited).
+    useEffect(() => {
+        if (!ready) return;
+        const keepAwake = () => {
+            const w = preview?.win;
+            if (!w || useEditor.getState().page === 'screensaver') return;
+            try {
+                w.lastActivity = Date.now();
+                if (w.screensaverOn && typeof w.exitScreensaver === 'function') w.exitScreensaver();
+            } catch { /* page reloading */ }
+        };
+        keepAwake();
+        const t = setInterval(keepAwake, 1000);
+        return () => clearInterval(t);
+    }, [ready]);
+
     // Content blocks only manage remote focus while the preview is being "played".
     useEffect(() => {
         const w = preview?.win;
