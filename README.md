@@ -8,7 +8,7 @@
 
 Seus apps de streaming numa prateleira de vidro, clima ao vivo que acompanha o pôr do sol e os filmes e séries em alta da semana.
 
-[Telas](#-telas) · [Instalação](#-instalação) · [Botão Home](#-fazer-o-botão-home-abrir-o-free-my-tv) · [Como funciona](#%EF%B8%8F-como-funciona) · [Arquitetura](#-arquitetura) · [Desenvolvimento](#-desenvolvimento)
+[Telas](#-telas) · [Instalação](#-instalação) · [Botão Home](#-fazer-o-botão-home-abrir-o-free-my-tv) · [Layouts](#-layouts-personalizados) · [Como funciona](#%EF%B8%8F-como-funciona) · [Arquitetura](#-arquitetura) · [Desenvolvimento](#-desenvolvimento) · [Roadmap](#%EF%B8%8F-roadmap-free-my-tv-studio)
 
 </div>
 
@@ -16,7 +16,10 @@ Seus apps de streaming numa prateleira de vidro, clima ao vivo que acompanha o p
 
 Este projeto adapta para o Fire TV o [**Free My TV for LG webOS**](https://github.com/danielthejoker18/FreeMyTvWebOS), de Daniel (licença MIT). A interface é a mesma do original. O que muda é a camada que conversa com o aparelho: no LG ela usa os serviços do webOS e aqui usa o Android, que é a base do Fire OS.
 
-> **Status:** primeira versão. O app ainda não foi testado num Fire TV de verdade. As telas abaixo vêm da interface rodando num navegador, com uma simulação dos apps instalados. Se algo não funcionar no seu aparelho, abra uma *issue* dizendo o modelo e a versão do Fire OS.
+> **Status:** em desenvolvimento.
+> - O APK compila e os testes automáticos passam: 19 testes do motor de layout e os cenários do runtime no Chrome headless.
+> - Nada foi testado num Fire TV de verdade ainda. As telas abaixo vêm da interface rodando no Chrome, com uma simulação dos apps instalados.
+> - Se algo não funcionar no seu aparelho, abra uma *issue* dizendo o modelo e a versão do Fire OS.
 
 ## 📺 Telas
 
@@ -112,6 +115,57 @@ adb shell settings put secure accessibility_enabled 1
 | Voltar | Fecha janelas e menus. Na tela principal não faz nada, porque esta é a tela inicial. |
 | ≡ (menu) | Abre **Personalizar** |
 
+## 🎨 Layouts personalizados
+
+A tela inicial pode ser **remontada por um arquivo de layout**, sem recompilar o app. No layout você define:
+- **stacks** horizontais e verticais (auto layout) e **posicionamento absoluto** com constraints;
+- cores e tokens, imagens de fundo, textos, botões e animações de entrada e de foco;
+- onde ficam os widgets do launcher: prateleira de apps, clima, relógio, data e filmes em alta.
+
+O formato completo está em **[docs/layouts.md](docs/layouts.md)**. Este é o formato que o futuro **Free My TV Studio** (editor visual para PC) vai gerar; veja o [Roadmap](#%EF%B8%8F-roadmap-free-my-tv-studio). Por enquanto os layouts são escritos à mão e publicados pela CLI.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/layout-classic.jpg" alt="Layout clássico"><br><sub><b><code>examples/layouts/classic.json</code>:</b> reproduz a tela original usando stacks.</sub></td>
+<td width="50%"><img src="docs/screenshots/layout-cinema.jpg" alt="Layout cinema"><br><sub><b><code>examples/layouts/cinema.json</code>:</b> imagem de fundo, relógio grande e "Sala de estar" posicionados livremente, botões de atalho e a prateleira e os filmes em alta numa stack embaixo.</sub></td>
+</tr>
+</table>
+
+### Publicar um layout no Fire TV (ADB)
+
+Requisitos: Node 18+ e o [platform-tools](https://developer.android.com/tools/releases/platform-tools) (`adb`), com a **Depuração ADB** ligada no Fire TV.
+
+```
+node tools/fmtv.mjs validate examples/layouts/cinema.json             # confere o layout
+node tools/fmtv.mjs publish  examples/layouts/cinema.json --device 192.168.0.50
+```
+
+O `publish` faz o seguinte:
+1. conecta no aparelho e confere se este PC está autorizado e se o Free My TV está instalado;
+2. valida o layout e monta o pacote `.fmtv`, com o SHA-256 de cada imagem;
+3. envia o pacote e pede ao app para importar;
+4. espera a TV **confirmar que desenhou** o layout.
+
+Se o layout falhar na TV, o app volta sozinho ao layout anterior e o comando mostra o motivo.
+
+| Comando | O que faz |
+|---|---|
+| `node tools/fmtv.mjs pack <layout.json>` | Gera o `.fmtv` sem enviar |
+| `node tools/fmtv.mjs inspect <pacote.fmtv>` | Lista e valida o conteúdo de um pacote |
+| `node tools/fmtv.mjs devices` | Lista os aparelhos que o `adb` enxerga |
+| `node tools/fmtv.mjs rollback --device IP` | Volta ao layout anterior |
+| `node tools/fmtv.mjs reset --device IP` | Volta à tela original (o layout fica guardado como anterior) |
+| `node tools/fmtv.mjs status --device IP` | Mostra o layout ativo e o anterior |
+
+As imagens de um layout ficam na pasta `<nome-do-layout>-assets/`, ao lado do `.json`. Também dá para indicar outra com `--assets`.
+
+### Sempre dá para voltar
+
+- **Pela TV:** **≡** (Personalizar) → **Layout padrão**. A tecla ≡ é do app, não do layout, então nenhum layout consegue removê-la.
+- **Pelo PC:** `node tools/fmtv.mjs reset`.
+- **Automático:** se um layout é inválido ou não chega a aparecer na tela, o app volta ao anterior sozinho.
+- **Sem layout publicado**, a tela é exatamente a original.
+
 ## ⚙️ Como funciona
 
 A interface do Free My TV é uma página web (HTML, CSS e JavaScript) feita para televisores. No LG ela roda dentro do webOS e chama os serviços dele para listar e abrir apps, por exemplo com `webOS.service.request('luna://com.webos.applicationManager', { method: 'launch' })`.
@@ -133,8 +187,13 @@ flowchart LR
             Shim["firetv-bridge.js<br/>imita webOS.service.request"]
         end
         Bridge["AppBridge.kt<br/>window.FireTV"]
-        Main["MainActivity.kt<br/>tela cheia, teclas Voltar/Menu"]
+        Main["MainActivity.kt<br/>tela cheia, teclas Voltar/Menu,<br/>comandos de layout via ADB"]
         Home["HomeButtonService.kt<br/>serviço de acessibilidade"]
+        Store["LayoutStore.kt<br/>layouts publicados"]
+        subgraph LayoutJS["WebView (assets/web/fmtv)"]
+            Engine["engine.js<br/>schema, validação,<br/>CSS, foco espacial"]
+            Runtime["runtime.js<br/>monta o layout"]
+        end
     end
 
     UI -- "luna://...applicationManager" --> Shim
@@ -144,6 +203,11 @@ flowchart LR
     Main --- Web
     Home -- "abre por cima da<br/>tela da Amazon" --> Main
     UI -- "HTTPS" --> APIs[("Open-Meteo<br/>TVMaze / TMDB")]
+    Runtime -- "getLayoutJson / layoutRendered / layoutFailed" --> Bridge
+    Bridge --> Store
+    Runtime -- "move os widgets reais" --> UI
+    Engine --- Runtime
+    CLI["PC: tools/fmtv.mjs"] -- "adb push + am start" --> Store
 ```
 
 | Arquivo | Papel |
@@ -153,7 +217,41 @@ flowchart LR
 | [`MainActivity.kt`](app/src/main/java/io/github/fellipelyra/freemytv/MainActivity.kt) | WebView em tela cheia servida por `https://appassets.androidplatform.net`, teclas Voltar e Menu, atualiza a lista de apps ao voltar |
 | [`AppBridge.kt`](app/src/main/java/io/github/fellipelyra/freemytv/AppBridge.kt) | Lista os apps (com banner/ícone em `data:` URL) e abre apps, trailers e configurações |
 | [`HomeButtonService.kt`](app/src/main/java/io/github/fellipelyra/freemytv/HomeButtonService.kt) | Serviço opcional que troca a tela da Amazon pelo Free My TV |
-| [`scripts/sync_web.py`](scripts/sync_web.py) | Copia a interface do projeto original e aplica as mudanças para o Fire TV |
+| [`fmtv/engine.js`](app/src/main/assets/web/fmtv/engine.js) | Motor de layout compartilhado (TV, CLI, testes e futuro Studio): schema, validação, migrações, geração de CSS, navegação espacial |
+| [`fmtv/runtime.js`](app/src/main/assets/web/fmtv/runtime.js) | Monta o layout publicado sobre a página, move os widgets reais, cuida das setas e informa sucesso ou falha ao app |
+| [`LayoutStore.kt`](app/src/main/java/io/github/fellipelyra/freemytv/LayoutStore.kt) | Importação segura dos pacotes, troca atômica, estado pendente/verificado, rollback automático, log |
+| [`tools/fmtv.mjs`](tools/fmtv.mjs) | CLI: validar, empacotar, inspecionar e publicar por ADB |
+| [`scripts/sync_web.py`](scripts/sync_web.py) | Copia a interface do projeto original e aplica as mudanças para o Fire TV (mantém `fmtv/` e `firetv-bridge.js`) |
+
+### Publicando um layout
+
+```mermaid
+sequenceDiagram
+    participant PC as tools/fmtv.mjs
+    participant S as LayoutStore.kt
+    participant R as runtime.js
+    participant E as engine.js
+
+    PC->>PC: valida (engine.js) e empacota com SHA-256
+    PC->>S: adb push layout.fmtv + am start IMPORT_LAYOUT
+    S->>S: confere nomes, tamanhos, hashes e versão
+    alt pacote recusado
+        S-->>PC: result.json: ok=false, motivo
+    else aceito
+        S->>S: atual → anterior, novo → atual (pendente)
+        S->>R: recarrega a página
+        R->>S: getLayoutJson()
+        R->>E: validate + nodeCss
+        alt desenhou
+            R->>S: layoutRendered(id) → verificado
+            S-->>PC: result.json: render ok
+        else falhou
+            R->>S: layoutFailed(id, motivo)
+            S->>S: volta ao anterior
+            S-->>PC: result.json: rollback + motivo
+        end
+    end
+```
 
 ### Abrindo um app
 
@@ -222,16 +320,47 @@ python scripts/sync_web.py ../FreeMyTvWebOS
 
 Cada mudança do script precisa encontrar exatamente o trecho esperado. Se o projeto original mudar algo, o script para com um erro em vez de gerar uma interface quebrada.
 
+### Testes
+
+```
+node --test tools/test/          # motor de layout e formato do pacote (19 testes)
+node tools/browser-test.mjs      # runtime no Chrome headless (precisa do Chrome ou Edge)
+```
+
+O teste de navegador serve a página como o APK faz, troca a ponte Android por uma simulação que registra as chamadas e confere quatro cenários:
+- **sem layout:** a tela original fica intacta;
+- **classic e cinema:** o layout é montado, os widgets reais são movidos, a renderização é confirmada ao app, o foco inicial cai no primeiro app e as setas navegam sem sair do layout;
+- **layout inválido:** a tela original continua e a falha é informada ao app, para o rollback.
+
+Com `--shots PASTA` ele também salva prints. **É uma simulação em navegador, não um teste no Fire TV.**
+
 ### Testar a interface no navegador
 
 Sirva a pasta `app/src/main/assets/web` com qualquer servidor local (por exemplo, `python -m http.server`) e abra no Chrome em 1920×1080. Sem a ponte Android a página entra no modo prévia: mostra tudo, mas não abre apps.
+
+## 🗺️ Roadmap: Free My TV Studio
+
+O objetivo é um editor visual para PC (no estilo de ferramentas de design de interface) que gera os layouts acima e os publica no Fire TV.
+
+| Fase | O que entra | Situação |
+|---|---|---|
+| 1. Auditoria e arquitetura | Mapear telas e widgets; schema v1; contratos entre editor, TV e publicação | ✅ Feito ([docs/layouts.md](docs/layouts.md)) |
+| 2. Runtime e vertical slice | Motor compartilhado, runtime na TV, stacks e posicionamento absoluto, importação segura, rollback, CLI e ADB | ✅ Feito. APK compila e os testes automáticos passam; **falta validar num Fire TV** |
+| 3. Studio desktop | App de PC (Tauri + React + TypeScript): canvas 1920×1080, camadas, propriedades, drag and drop, desfazer/refazer, salvar projeto | ⏳ Próxima |
+| 4. Biblioteca de blocos | Mais componentes (carrossel, grade, banner, ícones, gradientes prontos) | ⏳ |
+| 5. Todas as telas | Clima, Personalizar, protetor de tela, avisos e modais no runtime | ⏳ (o schema já aceita essas páginas) |
+| 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime e simulador de controle remoto com a mesma navegação | ⏳ |
+| 7. Publicação ADB no Studio | Descoberta de aparelhos, envio, rollback e histórico pelo editor (a base já está em `tools/lib/adb.mjs`) | ⏳ |
+| 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | ⏳ |
+| 9. Refinamento | Desempenho em aparelhos fracos, testes no aparelho, instalador do Studio | ⏳ |
 
 ## ⚠️ Limitações
 
 - **Sem troca de entrada HDMI:** o stick já está plugado no HDMI da TV.
 - **O botão Home depende de acessibilidade:** a Amazon pode mudar isso numa atualização.
 - **Vega OS não é suportado:** esses aparelhos não rodam apps Android.
-- **Precisa de internet** para o clima e para os filmes em alta. A prateleira de apps funciona offline.
+- **Precisa de internet** para o clima e para os filmes em alta. A prateleira de apps e o layout publicado funcionam offline.
+- **Layouts:** por enquanto o runtime só aplica a tela inicial. Clima, Personalizar e protetor de tela seguem o visual original, exceto pelas cores dos tokens.
 
 ## 📄 Licença e créditos
 

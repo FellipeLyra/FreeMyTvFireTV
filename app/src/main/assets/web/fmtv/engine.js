@@ -801,6 +801,13 @@
             var ic = { x: it.x + it.w / 2, y: it.y + it.h / 2 };
             // Distance along the movement axis, edge to edge (0 when touching/overlapping).
             var along, crossGap, crossCenter;
+            // Elements sharing more than half of their extent along the movement axis are
+            // in the same row (or column), even if one is shifted by a focus lift/scale
+            // animation that is still running; they are never "above" or "beside" each other.
+            var axisOverlap = horizontal
+                ? Math.min(it.x + it.w, cur.x + cur.w) - Math.max(it.x, cur.x)
+                : Math.min(it.y + it.h, cur.y + cur.h) - Math.max(it.y, cur.y);
+            if (axisOverlap > 0.5 * Math.min(horizontal ? it.w : it.h, horizontal ? cur.w : cur.h)) continue;
             if (horizontal) {
                 if ((ic.x - cc.x) * sign <= 1) continue;
                 along = sign > 0 ? it.x - (cur.x + cur.w) : cur.x - (it.x + it.w);

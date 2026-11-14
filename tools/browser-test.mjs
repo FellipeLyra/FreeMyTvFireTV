@@ -10,7 +10,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, extname, resolve, normalize } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { prepare } from './lib/package.mjs';
 
@@ -124,15 +124,18 @@ const server = createServer((req, res) => {
     }
 });
 
+// Asynchronous on purpose: this process also serves the page Chrome is loading.
 function runChrome(port, extra) {
     const profile = mkdtempSync(join(tmpdir(), 'fmtv-chrome-'));
-    try {
-        return spawnSync(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
-            `--user-data-dir=${profile}`, '--window-size=1920,1080', '--virtual-time-budget=20000', ...extra,
-            `http://127.0.0.1:${port}/assets/web/index.html`], { encoding: 'utf8', timeout: 90000, maxBuffer: 64 * 1024 * 1024 });
-    } finally {
-        rmSync(profile, { recursive: true, force: true });
-    }
+    return new Promise((done) => {
+        execFile(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
+            `--user-data-dir=${profile}`, '--window-size=1920,1080', '--virtual-time-budget=12000', ...extra,
+            `http://127.0.0.1:${port}/assets/web/index.html`], { encoding: 'utf8', timeout: 60000, maxBuffer: 64 * 1024 * 1024 },
+        (error, stdout, stderr) => {
+            try { rmSync(profile, { recursive: true, force: true }); } catch {}
+            done({ stdout, stderr, status: error ? error.code : 0 });
+        });
+    });
 }
 
 const failures = [];
@@ -143,15 +146,16 @@ function check(name, cond, detail) {
 
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
-for (const name of Object.keys(SCENARIOS)) {
+for (const name of Object.keys(SCENARIOS).filter((n) => !process.env.FMTV_ONLY || process.env.FMTV_ONLY.split(',').includes(n))) {
     current = name;
     console.log(`\n[${name}]`);
-    const r = runChrome(port, ['--dump-dom']);
+    const r = await runChrome(port, ['--dump-dom']);
     const m = /<pre id="fmtvTestResult"[^>]*>([\s\S]*?)<\/pre>/.exec(r.stdout || '');
     if (!m) { check('página carregou e o teste rodou', false, 'stdout=' + (r.stdout || '').length + ' status=' + r.status + ' ' + (r.stdout || '').slice(-400)); continue; }
     const log = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
     const calls = log.calls.map((c) => c[0]);
     const focus = log.focus;
+    if (process.env.FMTV_VERBOSE) console.log(JSON.stringify(focus.map((f) => [f[0], f[1] && f[1].id])));
     check('sem erros de JavaScript', log.errors.length === 0, log.errors.join(' | '));
     check('foco inicial existe', !!focus[0][1], JSON.stringify(focus[0]));
     check('todo foco cai em elemento visível', focus.every((f) => f[1] && f[1].visible), JSON.stringify(focus));
@@ -185,7 +189,7 @@ for (const name of Object.keys(SCENARIOS)) {
     }
     if (shotsDir) {
         mkdirSync(shotsDir, { recursive: true });
-        runChrome(port, [`--screenshot=${join(resolve(shotsDir), name + '.png')}`]);
+        await runChrome(port, [`--screenshot=${join(resolve(shotsDir), name + '.png')}`]);
     }
 }
 server.close();

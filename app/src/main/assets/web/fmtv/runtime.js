@@ -327,6 +327,10 @@
         if (!json) return;
         var res = render(json);
         var id = res.layout ? res.layout.id : '';
+        if (!id) {
+            // Invalid layouts still carry an id the app can match against its records.
+            try { var raw = JSON.parse(json); if (raw && typeof raw.id === 'string') id = raw.id.slice(0, 64); } catch (e) {}
+        }
         if (res.ok) {
             addRestoreButton();
             // Confirm only once the page has actually been painted with the layout.
