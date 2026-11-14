@@ -68,7 +68,10 @@ function NodeProperties({ loc }: { loc: T.Located }) {
     const upd = (key: string, fn: (n: Draft<LayoutNode>) => void) => s.updateNode(node.id, fn, key);
     const absolute = T.isAbsolute(node, parent);
     const inStack = parent?.type === 'stack';
-    const isText = node.type === 'text' || node.type === 'button' || node.type === 'clock-text';
+    const page = useEditor((st) => st.page);
+    const isText = node.type === 'text' || node.type === 'button' || node.type === 'clock-text' || (!parent && page === 'messages');
+    const meta = E.PAGES[page];
+    const styleOnly = !parent && !!meta?.styleOnly;
     const nameRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -91,7 +94,8 @@ function NodeProperties({ loc }: { loc: T.Located }) {
 
             {absolute && <AlignBar />}
 
-            {def?.container && <LayoutSection node={node} />}
+            {!parent && page !== 'home' && <PanelSection page={page} />}
+            {def?.container && !styleOnly && <LayoutSection node={node} />}
             {parent && <PositionSection node={node} parent={parent} absolute={absolute} inStack={inStack} />}
             {parent && !absolute && <SizeSection node={node} parent={parent} />}
             <AppearanceSection node={node} />
@@ -213,6 +217,40 @@ function AlignGrid({ horizontal, justify, align, onChange }: {
     );
 }
 const LBL: Record<string, string> = { start: 'início', center: 'centro', end: 'fim' };
+
+/* ---------------- Screen panel (overlay screens) ---------------- */
+
+const PLACEMENT_LABEL: Record<string, string> = {
+    right: 'Direita', left: 'Esquerda', center: 'Centro', bottom: 'Embaixo', fullscreen: 'Tela inteira',
+    'top-right': 'Canto superior direito', top: 'Em cima, centralizado', 'bottom-right': 'Canto inferior direito',
+};
+
+function PanelSection({ page }: { page: string }) {
+    const meta = E.PAGES[page];
+    const panel = useEditor((st) => (st.project.layout.pages[page] as { panel?: { placement?: string; width?: number; height?: number } } | undefined)?.panel || {});
+    const s = useEditor.getState();
+    const P = meta.panel;
+    return (
+        <Section title="Posição na tela">
+            {P && (
+                <Row label="Posição">
+                    <Select value={panel.placement || P.placements[0]} options={P.placements.map((v) => ({ value: v, label: PLACEMENT_LABEL[v] || v }))}
+                        onChange={(v) => s.updatePanel((p) => { p.placement = v; })} />
+                </Row>
+            )}
+            {P?.width && (
+                <div className="xywh">
+                    <label><span>Largura</span><NumberField value={panel.width} min={P.width[0]} max={P.width[1]} suffix="px" placeholder="padrão" onChange={(v) => s.updatePanel((p) => { p.width = v; }, 'w')} /></label>
+                    {P.height && <label><span>Altura</span><NumberField value={panel.height} min={P.height[0]} max={P.height[1]} suffix="px" placeholder="padrão" onChange={(v) => s.updatePanel((p) => { p.height = v; }, 'h')} /></label>}
+                </div>
+            )}
+            {meta.required && <p className="panel-note">Obrigatórios nesta tela: {meta.required.map((t) => E.registry[t].label).join(', ')}. Assim nunca se perde o acesso a essas funções.</p>}
+            {meta.styleOnly && <p className="panel-note">O texto da mensagem vem do launcher; aqui mudam só a posição e o visual (Aparência e Tipografia).</p>}
+            {!meta.styleOnly && <p className="panel-note">Fundo, cantos, borda e sombra da raiz valem para a janela inteira.</p>}
+            <button className="btn" onClick={() => s.resetPage(page)}><I.Undo size={14} /> Voltar ao visual original</button>
+        </Section>
+    );
+}
 
 /* ---------------- Position ---------------- */
 

@@ -2,7 +2,7 @@
 
 Editor visual para PC que cria e edita a tela inicial do Free My TV. Ele gera layouts no [formato schema v1](../docs/layouts.md), que o app do Fire TV aplica sem precisar recompilar.
 
-> **Status: Fases 3 e 4 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos e exportação já funcionam. A publicação direta no Fire TV pelo Studio (Fases 7 e 8) ainda não existe: por enquanto exporte o `.fmtv` e publique com a CLI (`node tools/fmtv.mjs publish`).
+> **Status: Fases 3, 4 e 5 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos e exportação já funcionam. A publicação direta no Fire TV pelo Studio (Fases 7 e 8) ainda não existe: por enquanto exporte o `.fmtv` e publique com a CLI (`node tools/fmtv.mjs publish`).
 
 ![Studio editando o layout Cinema](../docs/screenshots/studio-editor.jpg)
 
@@ -54,6 +54,7 @@ flowchart LR
 | **Assets** | Importar PNG, JPG ou WebP (até 8 MB), miniaturas, usar como fundo, arrastar para o canvas |
 | **Propriedades** | Layout, posição, tamanho, aparência (cor, gradiente com até 8 paradas, imagem, opacidade, cantos, borda, sombra, desfoque), tipografia, conteúdo e ações, foco do controle, animações (entrada e foco, com botão de reproduzir) |
 | **Tema** | Tokens de cor, fonte e tamanhos, espaçamento e cantos; elementos ligados a um token (`$colors.accent`) acompanham as mudanças; importar e exportar tema |
+| **Todas as telas** | Aba Páginas e seletor no topo: tela inicial, Clima, Personalizar, Protetor de tela e Mensagens. Cada tela é mostrada aberta no canvas, com o runtime da TV. "Personalizar esta tela" parte do original, sem mudar nada até você editar. "Posição na tela" define a posição e o tamanho da janela. Widgets reais de cada tela na biblioteca; os obrigatórios são protegidos (o aviso aparece na hora). "Voltar ao visual original" desfaz a personalização da tela |
 | **Prévia** | Tecla P; navegação pelas setas igual à da TV e controle remoto virtual; Esc volta a editar |
 | **Projetos** | Modelos (em branco, Clássico, Cinema); abrir e salvar `.fmtvproj` (Ctrl+O, Ctrl+S, Ctrl+Shift+S); abre também um `layout.json`; **autosave** com recuperação depois de uma falha; aviso ao fechar com alterações |
 | **Exportar** | Pacote `.fmtv` para a TV (validação rigorosa, só as imagens usadas, SHA-256) ou `layout.json` |
@@ -65,6 +66,10 @@ flowchart LR
 <td width="50%"><img src="../docs/screenshots/studio-preview.jpg" alt="Prévia com controle remoto"><br><sub>Prévia: foco no botão "Ajustes" depois de navegar pelas setas, controle virtual e o tema do layout.</sub></td>
 </tr>
 </table>
+
+![Editando a tela de clima](../docs/screenshots/studio-screens.jpg)
+
+<sub>Tela de clima personalizada: painel centralizado de 720 px, com os widgets reais do launcher e "Posição na tela".</sub>
 
 ## Rodar
 
@@ -88,9 +93,9 @@ npm run desktop:build    # gera o instalador em src-tauri/target/release/bundle/
 ## Testes
 
 ```
-npm test                 # 36 testes: árvore, constraints, stacks, auto layout, blocos, histórico, arquivos, pacote
+npm test                 # 39 testes: árvore, constraints, stacks, auto layout, blocos, telas, histórico, arquivos, pacote
 npm run dev              # em outro terminal
-npm run e2e              # 30 verificações no Chrome de verdade, com mouse e teclado
+npm run e2e              # 47 verificações no Chrome de verdade, com mouse e teclado
 ```
 
 O teste ponta a ponta abre o Studio no modelo Cinema e, com eventos reais de mouse e teclado:
@@ -128,6 +133,5 @@ studio/
 ## Limitações desta fase
 
 - **Auto layout no container:** um container com auto layout que está solto na tela (absoluto) tem tamanho fixo. O "Hug" do próprio container ainda não existe, só o dos filhos.
-- **Só a tela inicial é editável.** As outras telas entram com a Fase 5, junto com o suporte no runtime da TV.
 - **Publicar** e **Dispositivo** ficam desativados até as Fases 7 (ADB) e 8 (internet). Use **Exportar → Pacote (.fmtv)** e a CLI.
 - O teste ponta a ponta roda no Chrome; o app desktop usa o WebView2, que é do mesmo motor, mas não tem teste automático próprio.

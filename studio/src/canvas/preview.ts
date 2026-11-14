@@ -52,29 +52,63 @@ export class PreviewFrame {
         return { ok: !!res.ok, errors: (res.errors || []).map((e: any) => (e.path ? e.path + ': ' : '') + e.message) };
     }
 
+    /** Open the screen being edited inside the launcher page (and close the others). */
+    showPage(page: string) {
+        const w = this.win;
+        if (!w || !this.ready) return;
+        try {
+            if (page !== 'weather' && w.drawerOpen) w.closeDrawer();
+            if (page !== 'settings' && w.modalOpen) w.closeSettingsModal();
+            if (page !== 'screensaver' && w.screensaverOn) w.exitScreensaver();
+            const toast = this.doc!.getElementById('toastMsg');
+            if (page !== 'messages' && toast && toast.style.display === 'block') toast.style.display = 'none';
+            if (page === 'weather' && !w.drawerOpen) w.openDrawer();
+            if (page === 'settings' && !w.modalOpen) w.openSettingsModal();
+            if (page === 'screensaver' && !w.screensaverOn) {
+                w.enterScreensaver();
+                // Hold the clock still while editing (on the TV it keeps moving for OLED safety).
+                clearInterval(w.pixelShiftTimer);
+                const wrap = this.doc!.getElementById('screensaverClockWrap');
+                if (wrap) wrap.style.transform = 'none';
+            }
+            if (page === 'messages' && typeof w.showToast === 'function') w.showToast('Abrindo Netflix…', 24 * 3600 * 1000);
+        } catch { /* page still loading */ }
+        this.releaseFocus();
+    }
+
     releaseFocus() {
         try { (this.doc?.activeElement as HTMLElement | null)?.blur?.(); } catch { /* ignore */ }
         if (document.activeElement === this.iframe) this.iframe.blur();
     }
 
-    /** Rectangles of every layout element, in layout pixels. */
-    measure(): Record<string, Rect> {
-        const out: Record<string, Rect> = {};
+    /** Element that holds the given screen's layout (ids are only unique within a screen). */
+    pageRoot(page: string): Element | null {
         const d = this.doc;
-        if (!d) return out;
-        d.querySelectorAll('[data-fmtv-id]').forEach((el) => {
+        if (!d) return null;
+        return page === 'home' ? d.getElementById('fmtvLayoutRoot') : d.querySelector(`[data-fmtv-page="${page}"]`);
+    }
+
+    /** Rectangles of the current screen's layout elements, in layout pixels. */
+    measure(page = 'home'): Record<string, Rect> {
+        const out: Record<string, Rect> = {};
+        const scope = this.pageRoot(page);
+        if (!scope) return out;
+        [scope, ...Array.from(scope.querySelectorAll('[data-fmtv-id]'))].forEach((el) => {
+            if (!el.getAttribute('data-fmtv-id')) return;
             const r = el.getBoundingClientRect();
             out[el.getAttribute('data-fmtv-id')!] = { x: r.left, y: r.top, w: r.width, h: r.height };
         });
         return out;
     }
 
-    /** Ids under a point, deepest first. */
-    hit(x: number, y: number): string[] {
+    /** Ids under a point (within the current screen), deepest first. */
+    hit(x: number, y: number, page = 'home'): string[] {
         const d = this.doc;
-        if (!d) return [];
+        const scope = this.pageRoot(page);
+        if (!d || !scope) return [];
         const ids: string[] = [];
         for (const el of d.elementsFromPoint(x, y)) {
+            if (!scope.contains(el)) continue;
             let e: Element | null = el;
             while (e) {
                 const id = e.getAttribute && e.getAttribute('data-fmtv-id');

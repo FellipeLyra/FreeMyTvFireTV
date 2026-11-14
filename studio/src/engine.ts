@@ -18,13 +18,16 @@ export interface ComponentDef {
     container?: boolean;
     focusable?: boolean;
     slot?: string;
+    /** Screen a launcher widget belongs to. */
+    page?: string;
     props: Record<string, PropSpec>;
 }
 
 export interface EngineApi {
     SCHEMA_VERSION: number;
     LIMITS: Record<string, number>;
-    PAGES: Record<string, { label: string; runtime: boolean }>;
+    PAGES: Record<string, { label: string; runtime: boolean; styleOnly?: boolean; required?: string[];
+        panel?: { placements: string[]; width?: [number, number]; height?: [number, number] } }>;
     ICONS: Record<string, string>;
     CONTENT_SOURCES: string[];
     ACTIONS: Record<string, { label: string; needsApp?: boolean }>;

@@ -44,6 +44,7 @@ const SCENARIOS = {
     none: { layout: '' },
     classic: { layout: layoutJson('classic'), assets: null },
     streaming: { layout: layoutJson('streaming'), assets: null },
+    screens: { layout: layoutJson('all-screens'), assets: null },
     cinema: { layout: layoutJson('cinema'), assets: join(EXAMPLES, 'cinema-assets') },
     invalid: { layout: JSON.stringify(invalid) },
 };
@@ -77,6 +78,7 @@ const MOCK = (layout) => `<script>
     log.focus.push([key, describe(document.querySelector('.nav-item.focused'))]);
   }
   window.addEventListener('load', function(){
+    var ck = document.getElementById('screensaverClock'); log.atLoad = ck && ck.getAttribute('style');
     setTimeout(function(){
       log.focus.push(['initial', describe(document.querySelector('.nav-item.focused'))]);
       ['ArrowRight','ArrowRight','ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowDown','ArrowLeft'].forEach(press);
@@ -98,6 +100,57 @@ const MOCK = (layout) => `<script>
         scrolled: Array.prototype.filter.call(document.querySelectorAll('*'), function(e){ return e.scrollTop || e.scrollLeft; }).map(function(e){ return [e.id || e.getAttribute('data-fmtv-id') || e.className, e.scrollTop, e.scrollLeft]; }).concat([['window', window.scrollY, window.scrollX]]),
         nav: (window.mainNavItems || []).map(function(e){ var r = e.getBoundingClientRect(); return [describe(e).id, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; })
       };
+      // Other screens: open each overlay, look at it, close it.
+      if (document.querySelector('[data-fmtv-page]')) {
+        var sc = log.screens = {};
+        var wd = document.getElementById('weatherDrawer');
+        openDrawer();
+        var wp = document.querySelector('#weatherDrawer .drawer-panel');
+        sc.weather = {
+          root: !!wp.querySelector('[data-fmtv-page="weather"]'),
+          place: wd.getAttribute('data-fmtv-place'),
+          width: Math.round(wp.getBoundingClientRect().width),
+          current: !!wp.querySelector('[data-fmtv-page="weather"] .drawer-current'),
+          title: (wp.querySelector('[data-fmtv-id="w-title"]') || {}).textContent || null,
+          sunParked: !!document.querySelector('#fmtvParking .drawer-sun-row'),
+          bg: getComputedStyle(wp).backgroundImage.slice(0, 40)
+        };
+        closeDrawer();
+        openSettingsModal();
+        var sm = document.getElementById('settingsModal');
+        sc.settings = {
+          root: !!sm.querySelector('[data-fmtv-page="settings"]'),
+          navItems: modalNavItems.length,
+          navInside: modalNavItems.every(function(e){ return sm.contains(e); }),
+          order: Array.prototype.map.call(sm.querySelectorAll('[data-fmtv-page="settings"] > [data-fmtv-id]'), function(e){ return e.getAttribute('data-fmtv-id'); }),
+          save: !!sm.querySelector('#saveModalBtn'),
+          restore: !!sm.querySelector('#fmtvRestoreLayout'),
+          justify: getComputedStyle(sm).justifyContent
+        };
+        closeSettingsModal();
+        enterScreensaver();
+        sc.screensaver = {
+          root: !!document.querySelector('#screensaverOverlay [data-fmtv-page="screensaver"]'),
+          clockSize: getComputedStyle(document.getElementById('screensaverClock')).fontSize,
+          dateHidden: getComputedStyle(document.getElementById('screensaverDate')).display === 'none',
+          inline: document.getElementById('screensaverClock').getAttribute('style'), atLoad: log.atLoad, inRoot: !!document.querySelector('[data-fmtv-page="screensaver"] #screensaverClock')
+        };
+        exitScreensaver();
+        showToast('Abrindo Netflix…', 60000);
+        var toast = document.getElementById('toastMsg');
+        var tr = toast.getBoundingClientRect();
+        sc.messages = { text: toast.textContent, bottomGap: Math.round(window.innerHeight - tr.bottom), radius: getComputedStyle(toast).borderTopLeftRadius, fontSize: getComputedStyle(toast).fontSize };
+        toast.style.display = 'none';
+        // Removing the layout must give every screen its original structure back.
+        FMTVLayout.clear();
+        sc.restored = {
+          current: document.querySelector('.drawer-current').parentNode.classList.contains('drawer-panel'),
+          actions: document.querySelector('#settingsModal .modal-actions').parentNode.classList.contains('modal-box'),
+          clockSize: getComputedStyle(document.getElementById('screensaverClock')).fontSize,
+          toastTop: getComputedStyle(document.getElementById('toastMsg')).top,
+          noPageRoots: !document.querySelector('[data-fmtv-page]')
+        };
+      }
       // Put focus back where the screenshot expects it.
       var pre = document.createElement('pre'); pre.id = 'fmtvTestResult'; pre.style.display = 'none';
       pre.textContent = JSON.stringify(log); document.body.appendChild(pre);
@@ -219,6 +272,19 @@ for (const name of Object.keys(SCENARIOS).filter((n) => !process.env.FMTV_ONLY |
         check('↑ sai do carrossel para o destaque/clima', focus[3][1] && !focus[3][1].card, JSON.stringify(focus[3][1]));
         check('↓ chega ao carrossel de séries', focus.slice(5, 8).some((f) => f[1] && f[1].card), JSON.stringify(focus.slice(5, 8)));
         check('foco nunca sai do layout', focus.every((f) => f[1] && f[1].inLayout), JSON.stringify(focus.filter((f) => !f[1] || !f[1].inLayout)));
+    }
+    if (name === 'screens') {
+        const sc = log.screens || {};
+        check('layout com todas as telas montado', log.dom.root && log.calls.some((c) => c[0] === 'layoutRendered' && c[1] === 'all-screens'));
+        check('clima: painel personalizado, centralizado, 720 px', sc.weather && sc.weather.root && sc.weather.place === 'center' && sc.weather.width === 720, JSON.stringify(sc.weather));
+        check('clima: widget real "Clima agora" dentro do painel, título novo, sol estacionado', sc.weather && sc.weather.current && sc.weather.title === 'Como está o tempo' && sc.weather.sunParked, JSON.stringify(sc.weather));
+        check('clima: fundo do painel vem do layout', sc.weather && /linear-gradient/.test(sc.weather.bg), sc.weather && sc.weather.bg);
+        check('Personalizar: preferências antes dos apps (ordem do layout)', sc.settings && JSON.stringify(sc.settings.order) === '["s-header","s-prefs","s-apps","s-actions"]', JSON.stringify(sc.settings));
+        check('Personalizar: navegação só por itens da janela, com Salvar e "Layout padrão"', sc.settings && sc.settings.navItems > 5 && sc.settings.navInside && sc.settings.save && sc.settings.restore, JSON.stringify(sc.settings));
+        check('Personalizar: janela à direita', sc.settings && sc.settings.justify === 'flex-end', sc.settings && sc.settings.justify);
+        check('protetor: relógio 180 px sem data', sc.screensaver && sc.screensaver.root && sc.screensaver.clockSize === '180px' && sc.screensaver.dateHidden, JSON.stringify(sc.screensaver));
+        check('mensagens: embaixo, com o estilo do layout', sc.messages && sc.messages.text === 'Abrindo Netflix…' && sc.messages.bottomGap === 40 && sc.messages.fontSize === '22px', JSON.stringify(sc.messages));
+        check('sem o layout, todas as telas voltam ao original', sc.restored && sc.restored.current && sc.restored.actions && sc.restored.clockSize === '132px' && sc.restored.toastTop === '24px' && sc.restored.noPageRoots, JSON.stringify(sc.restored));
     }
     if (shotsDir) {
         mkdirSync(shotsDir, { recursive: true });

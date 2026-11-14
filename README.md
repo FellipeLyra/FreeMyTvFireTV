@@ -373,8 +373,8 @@ O objetivo é um editor visual para PC (no estilo de ferramentas de design de in
 | 2. Runtime e vertical slice | Motor compartilhado, runtime na TV, stacks e posicionamento absoluto, importação segura, rollback, CLI e ADB | ✅ Feito. APK compila e os testes automáticos passam; **falta validar num Fire TV** |
 | 3. Studio desktop | App de PC (Tauri + React + TypeScript): canvas 1920×1080, camadas, propriedades, drag and drop, desfazer/refazer, salvar projeto | ✅ Feito ([studio/](studio/)). 26 testes unitários + 16 verificações ponta a ponta no Chrome |
 | 4. Biblioteca de blocos | Carrossel, grade, banner, clima completo, ícones, blocos prontos e blocos do usuário; auto layout no estilo do Figma | ✅ Feito. Os blocos usam os serviços do launcher (TMDB/TVMaze, Open-Meteo, apps do Android) |
-| 5. Todas as telas | Clima, Personalizar, protetor de tela, avisos e modais no runtime | ⏳ Próxima (o schema já aceita essas páginas) |
-| 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime e simulador de controle remoto com a mesma navegação | 🟡 Base pronta: a Prévia e o controle virtual já existem; faltam ordem de foco visual, alertas de acessibilidade e resoluções 720p/4K |
+| 5. Todas as telas | Clima, Personalizar, protetor de tela e mensagens no runtime e no Studio | ✅ Feito. As funções seguem as do launcher, as partes obrigatórias são protegidas e tudo volta ao original sem o layout. Detalhes, confirmações e carregamento não existem no launcher e não foram inventados |
+| 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime e simulador de controle remoto com a mesma navegação | 🟡 Próxima. Base pronta: a Prévia e o controle virtual já existem; faltam ordem de foco visual, alertas de acessibilidade e resoluções 720p/4K |
 | 7. Publicação ADB no Studio | Descoberta de aparelhos, envio, rollback e histórico pelo editor (a base já está em `tools/lib/adb.mjs`) | ⏳ |
 | 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | ⏳ |
 | 9. Refinamento | Desempenho em aparelhos fracos, testes no aparelho, instalador do Studio | ⏳ |
@@ -385,7 +385,7 @@ O objetivo é um editor visual para PC (no estilo de ferramentas de design de in
 - **O botão Home depende de acessibilidade:** a Amazon pode mudar isso numa atualização.
 - **Vega OS não é suportado:** esses aparelhos não rodam apps Android.
 - **Precisa de internet** para o clima e para os filmes em alta. A prateleira de apps e o layout publicado funcionam offline.
-- **Layouts:** por enquanto o runtime só aplica a tela inicial. Clima, Personalizar e protetor de tela seguem o visual original, exceto pelas cores dos tokens.
+- **Layouts:** a tela inicial, o clima, o Personalizar, o protetor e as mensagens podem ser personalizados. Tela de detalhes, confirmações e carregamento não existem no launcher.
 
 ## 📄 Licença e créditos
 

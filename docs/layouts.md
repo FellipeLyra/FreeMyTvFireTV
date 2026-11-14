@@ -41,7 +41,7 @@ flowchart LR
 | `name` | sim | Nome exibido, até 80 caracteres. |
 | `tokens` | não | Cores, espaçamentos, raios, tamanhos de fonte e família. Veja [Tokens](#tokens). |
 | `assets` | não | Imagens usadas pelo layout. Veja [Assets](#assets). |
-| `pages` | sim | Telas. A `home` é obrigatória. `weather`, `settings` e `screensaver` são aceitas, mas esta versão do runtime ainda não as aplica. |
+| `pages` | sim | Telas. A `home` é obrigatória; `weather`, `settings`, `screensaver` e `messages` são opcionais (veja [Telas](#telas)). Uma tela ausente usa o visual original do launcher. |
 | `createdAt`, `generator` | não | Metadados livres. |
 
 Qualquer outro campo é **recusado**. Assim um erro de digitação não passa despercebido.
@@ -136,6 +136,31 @@ Só estas ações existem. Não há como rodar código:
 | `launch-app` | Abre um app (`appId`: nome de pacote Android, por exemplo `com.netflix.ninja`) |
 | `fire-settings` | Abre as configurações do Fire TV |
 | `amazon-home` | Abre a tela da Amazon |
+
+## Telas
+
+Além da tela inicial, o layout pode personalizar as outras telas que o launcher **realmente tem**. Cada uma substitui o conteúdo de uma janela que já existe, e o comportamento continua sendo o do launcher: abrir e fechar, salvar as preferências, atualizar o clima e mover o relógio do protetor.
+
+```json
+"weather": {
+  "panel": { "placement": "center", "width": 720, "height": 620 },
+  "root": { "id": "w-root", "type": "stack", "children": [ { "id": "w-current", "type": "weather.current" } ] }
+}
+```
+
+| Tela | Aparece quando | `panel.placement` | Widgets reais | Obrigatórios |
+|---|---|---|---|---|
+| `weather` | O widget de clima é aberto (OK ou Voltar fecham) | `right`, `left`, `center`, `bottom` (+ `width` 320–1920, `height` 200–1080) | `weather.header`, `weather.current`, `weather.hourly`, `weather.sun`, `weather.close` | nenhum (sem `weather.close` há um aviso) |
+| `settings` | Tecla ≡ / botão Personalizar | `center`, `left`, `right`, `fullscreen` (+ `width` 640–1920, `height` 400–1080) | `settings.header`, `settings.apps`, `settings.preferences`, `settings.actions` | `settings.preferences` e `settings.actions` (para nunca perder o acesso às configurações nem ao botão **Layout padrão**) |
+| `screensaver` | 3 minutos sem uso | (tela inteira) | `screensaver.clock`, com `props` `clockSize`, `dateSize`, `color` e `showDate` | `screensaver.clock` |
+| `messages` | Avisos rápidos ("Abrindo Netflix…") | `top-right`, `top`, `bottom`, `bottom-right`, `center` | (nenhum; o texto é do launcher) | só o visual: a raiz não aceita filhos |
+
+Regras:
+- Cada widget só pode ser usado na sua tela. Os `launcher.*` são da tela inicial.
+- Fundo, cantos, borda, sombra e desfoque da **raiz** valem para a janela inteira (o painel, a janela ou o aviso).
+- Partes da tela que o layout não usa saem dela e da navegação do controle. Elas voltam quando o layout é removido.
+- Elementos parados no protetor geram um aviso de risco para telas OLED. O relógio do protetor continua mudando de lugar sozinho.
+- **Não existem no launcher:** tela de detalhes de conteúdo, confirmações, carregamento e menus de contexto. Por isso não estão no formato.
 
 ## Tokens
 

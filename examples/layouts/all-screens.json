@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "id": "all-screens",
+  "name": "Todas as telas",
+  "generator": "hand-written example",
+  "tokens": { "colors": { "accent": "#7ee0a1", "focus": "#7ee0a1" } },
+  "pages": {
+    "home": {
+      "root": {
+        "id": "root", "type": "stack", "name": "Tela",
+        "layout": { "direction": "vertical", "justify": "space-between", "align": "stretch", "padding": [34, 54, 34, 54] },
+        "children": [
+          { "id": "header", "type": "stack", "layout": { "direction": "horizontal", "align": "center", "gap": 18 },
+            "children": [
+              { "id": "brand", "type": "launcher.brand" },
+              { "id": "space", "type": "spacer" },
+              { "id": "customize", "type": "launcher.settings-button" },
+              { "id": "weather", "type": "launcher.weather" }
+            ] },
+          { "id": "hero", "type": "launcher.hero" },
+          { "id": "apps", "type": "launcher.app-shelf", "focus": { "initial": true } },
+          { "id": "trending", "type": "launcher.trending" }
+        ]
+      }
+    },
+    "weather": {
+      "panel": { "placement": "center", "width": 720, "height": 620 },
+      "root": {
+        "id": "w-root", "type": "stack", "name": "Painel de clima",
+        "style": { "background": { "type": "linear", "angle": 160, "stops": [{ "color": "#123a2a", "pos": 0 }, { "color": "#08110d", "pos": 100 }] }, "radius": 32 },
+        "layout": { "direction": "vertical", "gap": 24, "align": "stretch" },
+        "children": [
+          { "id": "w-title", "type": "text", "props": { "text": "Como está o tempo" }, "text": { "size": 34, "weight": 800, "color": "$colors.accent" } },
+          { "id": "w-current", "type": "weather.current" },
+          { "id": "w-hourly", "type": "weather.hourly" },
+          { "id": "w-close", "type": "weather.close" }
+        ]
+      }
+    },
+    "settings": {
+      "panel": { "placement": "right", "width": 900 },
+      "root": {
+        "id": "s-root", "type": "stack", "name": "Personalizar",
+        "style": { "background": { "type": "solid", "color": "rgba(10,24,18,0.97)" } },
+        "layout": { "direction": "vertical", "gap": 22, "align": "stretch" },
+        "children": [
+          { "id": "s-header", "type": "settings.header" },
+          { "id": "s-prefs", "type": "settings.preferences" },
+          { "id": "s-apps", "type": "settings.apps" },
+          { "id": "s-actions", "type": "settings.actions" }
+        ]
+      }
+    },
+    "screensaver": {
+      "root": {
+        "id": "ss-root", "type": "stack", "name": "Protetor",
+        "style": { "background": { "type": "solid", "color": "#000000" } },
+        "layout": { "direction": "vertical", "justify": "center", "align": "center" },
+        "children": [
+          { "id": "ss-clock", "type": "screensaver.clock", "props": { "clockSize": 180, "showDate": false, "color": "$colors.accent" } }
+        ]
+      }
+    },
+    "messages": {
+      "panel": { "placement": "bottom" },
+      "root": {
+        "id": "m-root", "type": "frame", "name": "Mensagem",
+        "style": { "background": { "type": "solid", "color": "#7ee0a1" }, "radius": 999 },
+        "text": { "size": 22, "weight": 700, "color": "#04110a" },
+        "layout": { "padding": [14, 30, 14, 30] }
+      }
+    }
+  }
+}

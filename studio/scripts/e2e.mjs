@@ -275,6 +275,71 @@ try {
         const shot = await send('Page.captureScreenshot', { format: 'png' });
         writeFileSync(SHOT.replace(/\.png$/, '-tela-autolayout.png'), Buffer.from(shot.data, 'base64'));
     }
+
+    // Phase 5: other screens
+    console.log('\n[Studio e2e: outras telas]');
+    const clickAt = async (expr) => {
+        const p = await evaluate(`(() => { const b = ${expr}; if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+        if (!p) throw new Error('elemento não encontrado: ' + expr);
+        await mouse('mouseMoved', p.x, p.y, 0); await mouse('mousePressed', p.x, p.y); await mouse('mouseReleased', p.x, p.y, 0);
+        await sleep(600);
+    };
+    const frameEval = (code) => evaluate(`(() => { const w = document.querySelector('iframe').contentWindow, d = w.document; ${code} })()`);
+    await evaluate(`${S}.setLeftTab('pages')`);
+    await sleep(300);
+    await clickAt(`Array.from(document.querySelectorAll('.page-item')).find(e => e.querySelector('.page-name').textContent === 'Clima')`);
+    check('aba Páginas abre a tela de clima', (await evaluate(`${S}.page`)) === 'weather');
+    check('canvas mostra o painel de clima original aberto', await frameEval(`return w.drawerOpen === true && !d.querySelector('[data-fmtv-page="weather"]');`));
+    await clickAt(`document.querySelector('.page-original .btn')`);
+    check('"Personalizar esta tela" cria a tela a partir do original', (await evaluate(`!!${S}.project.layout.pages.weather`)) && await frameEval(`return !!d.querySelector('#weatherDrawer [data-fmtv-page="weather"] .drawer-current');`));
+    await evaluate(`${S}.updatePanel(p => { p.placement = 'center'; p.width = 720; p.height = 620; })`);
+    await sleep(700);
+    check('posição "Centro" e largura 720 chegam ao painel da TV', await frameEval(`const wd = d.getElementById('weatherDrawer'); return wd.getAttribute('data-fmtv-place') === 'center' && Math.round(wd.querySelector('.drawer-panel').getBoundingClientRect().width) === 720;`));
+    const wsel = await evaluate(`Object.keys(${S}.rects).sort().join(',')`);
+    check('seleção/medidas só da tela atual', /weather-current/.test(wsel) && !/(^|,)apps(,|$)/.test(wsel), wsel);
+    if (SHOT) {
+        await evaluate(`${S}.select(['weather-root'])`);
+        await sleep(600);
+        const shotW = await send('Page.captureScreenshot', { format: 'png' });
+        writeFileSync(SHOT.replace(/\.png$/, '-weather.png'), Buffer.from(shotW.data, 'base64'));
+    }
+
+    await evaluate(`${S}.setPage('settings')`);
+    await sleep(700);
+    check('tela Personalizar aberta no canvas', await frameEval(`return w.modalOpen === true;`));
+    await evaluate(`${S}.customizePage('settings'); __fmtvStudio.setState({ toasts: [] })`);
+    await sleep(500);
+    await evaluate(`${S}.select(['settings-actions']); document.activeElement && document.activeElement.blur()`);
+    await key('Delete', 'Delete', 0, 46);
+    await sleep(400);
+    check('remover Salvar/Cancelar é avisado na hora', (await evaluate(`${S}.toasts.some(t => /Mudança inválida/.test(t.text))`)) && (await evaluate(`${S}.validation.errors.some(e => /Botões Salvar/.test(e.message))`)));
+    check('o canvas continua com os botões (última versão válida)', await frameEval(`return !!d.querySelector('#settingsModal #saveModalBtn');`));
+    await key('z', 'KeyZ', 2, 90);
+    await sleep(400);
+    check('Ctrl+Z devolve os botões e o layout volta a ser válido', (await evaluate(`${S}.validation.errors.length`)) === 0);
+
+    await evaluate(`${S}.setPage('screensaver')`);
+    await sleep(700);
+    check('protetor aberto no canvas e parado para edição', await frameEval(`return w.screensaverOn === true && d.getElementById('screensaverClockWrap').style.transform === 'none';`));
+    await sleep(1500);
+    check('protetor não é fechado enquanto é a tela editada', await frameEval(`return w.screensaverOn === true;`));
+    await evaluate(`${S}.customizePage('screensaver')`);
+    await evaluate(`${S}.updateNode('screensaver-clock', n => { n.props = { ...n.props, clockSize: 200, showDate: false }; })`);
+    await sleep(600);
+    check('tamanho do relógio e data oculta aplicados', await frameEval(`return getComputedStyle(d.getElementById('screensaverClock')).fontSize === '200px' && getComputedStyle(d.getElementById('screensaverDate')).display === 'none';`));
+
+    await evaluate(`${S}.setPage('messages')`);
+    await sleep(600);
+    await evaluate(`${S}.customizePage('messages')`);
+    await evaluate(`${S}.updatePanel(p => { p.placement = 'bottom'; })`);
+    await sleep(600);
+    check('mensagem de exemplo visível, embaixo', await frameEval(`const t = d.getElementById('toastMsg'); const r = t.getBoundingClientRect(); return t.style.display === 'block' && Math.round(w.innerHeight - r.bottom) === 40;`));
+    check('mensagem selecionável no canvas', (await evaluate(`!!${S}.rects['message']`)));
+
+    await evaluate(`${S}.setPage('home')`);
+    await sleep(700);
+    check('voltar à tela inicial fecha as outras telas', await frameEval(`return !w.drawerOpen && !w.modalOpen && !w.screensaverOn && d.getElementById('toastMsg').style.display !== 'block';`));
+    check('documento com todas as telas continua válido', (await evaluate(`${S}.validation.errors.length`)) === 0, JSON.stringify(await evaluate(`${S}.validation.errors`)));
 } catch (e) {
     check('execução', false, e.stack || String(e));
 } finally {

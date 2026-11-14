@@ -35,11 +35,23 @@
     // Pages the runtime knows. Only those marked `runtime: true` are rendered on
     // the TV by this version; the others are accepted (so a Studio project can
     // hold them) and reported as warnings.
+    // Screens of the launcher. Besides `home`, each one replaces the contents of an
+    // existing overlay (`host`), keeping its behaviour: the launcher still opens and
+    // closes it, saves settings, updates the weather and shifts the screensaver clock.
+    //   panel:    which placements the overlay accepts, and size limits;
+    //   required: launcher widgets that must stay (never lose access to settings);
+    //   styleOnly: only the look can change (no children).
     var PAGES = {
         home: { label: 'Tela inicial', runtime: true },
-        weather: { label: 'Clima', runtime: false },
-        settings: { label: 'Configurações', runtime: false },
-        screensaver: { label: 'Protetor de tela', runtime: false }
+        weather: { label: 'Clima', runtime: true, host: '#weatherDrawer .drawer-panel', backdrop: '#weatherDrawer',
+            panel: { placements: ['right', 'left', 'center', 'bottom'], width: [320, 1920], height: [200, 1080] } },
+        settings: { label: 'Personalizar', runtime: true, host: '#settingsModal .modal-box', backdrop: '#settingsModal',
+            panel: { placements: ['center', 'left', 'right', 'fullscreen'], width: [640, 1920], height: [400, 1080] },
+            required: ['settings.preferences', 'settings.actions'] },
+        screensaver: { label: 'Protetor de tela', runtime: true, host: '#screensaverOverlay',
+            required: ['screensaver.clock'] },
+        messages: { label: 'Mensagens', runtime: true, host: '#toastMsg', styleOnly: true,
+            panel: { placements: ['top-right', 'top', 'bottom', 'bottom-right', 'center'] } }
     };
 
     var ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
@@ -200,7 +212,7 @@
         } });
 
     function slot(type, label, selector, extra) {
-        var def = { type: type, label: label, category: 'launcher', slot: selector, props: {} };
+        var def = { type: type, label: label, category: 'launcher', slot: selector, props: {}, page: 'home' };
         for (var k in extra) def[k] = extra[k];
         return defineComponent(def);
     }
@@ -212,6 +224,25 @@
     slot('launcher.hero', 'Destaque do item focado', '.hero-shelf');
     slot('launcher.app-shelf', 'Apps favoritos', '.shelf-wrapper', { focusable: true });
     slot('launcher.trending', 'Filmes e séries em alta', '.picks-section', { focusable: true });
+
+    // Widgets of the other screens. `up: 1` takes the parent of the matched element
+    // (sections without their own class in the launcher page).
+    slot('weather.header', 'Título do clima', '#weatherDrawer .modal-header', { page: 'weather' });
+    slot('weather.current', 'Clima agora', '#weatherDrawer .drawer-current', { page: 'weather' });
+    slot('weather.hourly', 'Próximas horas', '#drawerHourly', { page: 'weather', up: 1 });
+    slot('weather.sun', 'Nascer e pôr do sol', '#weatherDrawer .drawer-sun-row', { page: 'weather' });
+    slot('weather.close', 'Botão Fechar', '#weatherDrawer .modal-actions', { page: 'weather' });
+    slot('settings.header', 'Título do Personalizar', '#settingsModal .modal-header', { page: 'settings' });
+    slot('settings.apps', 'Escolha de apps', '#appSelectorGrid', { page: 'settings', up: 1 });
+    slot('settings.preferences', 'Preferências', '#settingsModal .settings-row', { page: 'settings', up: 1 });
+    slot('settings.actions', 'Botões Salvar / Cancelar', '#settingsModal .modal-actions', { page: 'settings' });
+    slot('screensaver.clock', 'Relógio do protetor', '#screensaverClockWrap', { page: 'screensaver',
+        props: {
+            showDate: { type: 'boolean', def: true },
+            clockSize: { type: 'number', min: 40, max: 400, def: 132 },
+            dateSize: { type: 'number', min: 10, max: 120, def: 22 },
+            color: { type: 'color', def: 'rgba(255,255,255,0.82)' }
+        } });
 
     /* ------------------------------------------------------------------ */
     /* Small helpers                                                       */
@@ -557,7 +588,9 @@
         if (def.slot) {
             if (ctx.slots[node.type]) r.error(path, node.type + ' aparece mais de uma vez (cada widget do launcher só pode ser usado uma vez)');
             ctx.slots[node.type] = true;
+            if (def.page !== ctx.page) r.error(path, def.label + ' pertence à tela "' + (PAGES[def.page] || {}).label + '"');
         }
+        if (ctx.page === 'screensaver' && parent && !def.slot && !def.container && node.visible !== false) ctx.staticOnScreensaver = true;
         if ((node.type === 'content-row' || node.type === 'content-grid') && (props.source === 'apps' || props.source === 'favorites' || (!props.source && node.type === 'content-grid'))) ctx.appsBlock = true;
         var takesFocus = def.focusable && !(node.type === 'weather-full' && props.opensDrawer === false);
         if (takesFocus && node.visible !== false && !(node.focus && node.focus.skip)) ctx.focusable.push(node.id);
@@ -636,11 +669,30 @@
             if (!PAGES[pid]) { r.error('pages.' + pid, 'tela desconhecida'); continue; }
             var page = L.pages[pid];
             if (!isObj(page) || !isObj(page.root)) { r.error('pages.' + pid + '.root', 'obrigatório'); continue; }
-            checkKeys(r, 'pages.' + pid, page, ['root']);
-            if (!PAGES[pid].runtime && !opts.studio) r.warn('pages.' + pid, PAGES[pid].label + ' ainda não é aplicada pelo runtime desta versão');
-            var ctx = { count: 0, ids: {}, slots: {}, tokens: tokens, assets: assets, focusable: [], initialFocus: null, settingsReachable: false };
+            var meta = PAGES[pid];
+            checkKeys(r, 'pages.' + pid, page, meta.panel ? ['root', 'panel'] : ['root']);
+            if (!meta.runtime && !opts.studio) r.warn('pages.' + pid, meta.label + ' ainda não é aplicada pelo runtime desta versão');
+            if (page.panel !== undefined && meta.panel) {
+                var P = page.panel, pp = 'pages.' + pid + '.panel';
+                if (!isObj(P)) r.error(pp, 'deve ser um objeto');
+                else {
+                    checkKeys(r, pp, P, meta.panel.width ? ['placement', 'width', 'height'] : ['placement']);
+                    checkEnum(r, pp + '.placement', P.placement, meta.panel.placements);
+                    if (P.width !== undefined && !(isNum(P.width) && P.width >= meta.panel.width[0] && P.width <= meta.panel.width[1])) r.error(pp + '.width', meta.panel.width.join('…') + ' px');
+                    if (P.height !== undefined && !(isNum(P.height) && P.height >= meta.panel.height[0] && P.height <= meta.panel.height[1])) r.error(pp + '.height', meta.panel.height.join('…') + ' px');
+                }
+            }
+            var ctx = { page: pid, count: 0, ids: {}, slots: {}, tokens: tokens, assets: assets, focusable: [], initialFocus: null, settingsReachable: false };
             if (!registry[page.root.type] || !registry[page.root.type].container) r.error('pages.' + pid + '.root', 'a raiz precisa ser stack ou frame');
+            if (meta.styleOnly && page.root.children && page.root.children.length) r.error('pages.' + pid + '.root.children', meta.label + ': só o visual pode mudar (sem elementos dentro)');
             validateNode(r, page.root, 'pages.' + pid + '.root', ctx, 0, null);
+            (meta.required || []).forEach(function(t) {
+                if (!ctx.slots[t]) r.error('pages.' + pid, meta.label + ' precisa de "' + registry[t].label + '" (para nunca perder o acesso a essa função)');
+            });
+            if (pid === 'screensaver' && ctx.staticOnScreensaver) {
+                r.warn('pages.screensaver', 'elementos parados no protetor de tela podem marcar telas OLED; o relógio do protetor muda de lugar sozinho');
+            }
+            if (pid === 'weather' && !ctx.slots['weather.close']) r.warn('pages.weather', 'sem o botão Fechar; o painel fecha com OK ou Voltar');
             if (pid === 'home') {
                 // In the Studio an unfinished page is allowed; export and the TV are strict.
                 if (!ctx.focusable.length) (opts.studio ? r.warn : r.error).call(r, 'pages.home', 'nenhum elemento navegável pelo controle; o layout seria inutilizável');

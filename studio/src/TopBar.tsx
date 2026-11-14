@@ -41,6 +41,7 @@ export function TopBar() {
     const zoom = useEditor((s) => s.zoom);
     const mode = useEditor((s) => s.mode);
     const page = useEditor((s) => s.page);
+    const customPages = useEditor((s) => Object.keys(s.project.layout.pages));
     const showSafeArea = useEditor((s) => s.showSafeArea);
     const snap = useEditor((s) => s.snap);
     const s = useEditor.getState();
@@ -89,8 +90,8 @@ export function TopBar() {
                 <input className="project-name" value={name} maxLength={80} aria-label="Nome do projeto"
                     onChange={(e) => s.commit('nome', (p) => { p.layout.name = e.target.value || 'Sem nome'; }, 'project-name')} />
                 <span className={'dirty-dot' + (dirty ? ' on' : '')} title={dirty ? 'Alterações não salvas' : 'Tudo salvo'} />
-                <select className="select-field page-select" value={page} aria-label="Tela" onChange={() => undefined}>
-                    {Object.entries(E.PAGES).map(([id, p]) => <option key={id} value={id} disabled={!p.runtime}>{p.label}{p.runtime ? '' : ' (em breve)'}</option>)}
+                <select className="select-field page-select" value={page} aria-label="Tela" onChange={(e) => s.setPage(e.target.value)}>
+                    {Object.entries(E.PAGES).map(([id, p]) => <option key={id} value={id} disabled={!p.runtime}>{p.label}{customPages.includes(id) || id === 'home' ? '' : ' (original)'}</option>)}
                 </select>
             </div>
 

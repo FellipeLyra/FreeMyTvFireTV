@@ -20,9 +20,14 @@ export function BottomBar() {
     const crumbs = selection.length === 1 ? T.pathTo(root, selection[0]).map((id) => T.find(root, id)!.node) : [];
 
     const goto = (path: string) => {
+        const st = useEditor.getState();
+        // Errors can belong to another screen: go there first.
+        const pageMatch = /^pages\.([a-z]+)/.exec(path);
+        if (pageMatch && pageMatch[1] !== st.page) st.setPage(pageMatch[1]);
         const ids = Array.from(path.matchAll(/<([^>]+)>/g)).map((m) => m[1]);
         const id = ids[ids.length - 1];
-        if (id && T.find(root, id)) useEditor.getState().select([id]);
+        const r = useEditor.getState().project.layout.pages[useEditor.getState().page]?.root;
+        if (id && r && T.find(r, id)) useEditor.getState().select([id]);
     };
 
     return (

@@ -7,6 +7,7 @@ import { I, iconForType } from '../ui/icons';
 import { bytesToBase64, sha256Hex } from '../lib/bytes';
 import { pickFiles } from '../lib/storage';
 import { BUILTIN_BLOCKS, type Block } from '../model/blocks';
+import { PAGE_HINTS } from '../model/pages';
 
 const TABS: { id: LeftTab; label: string; icon: JSX.Element }[] = [
     { id: 'pages', label: 'Páginas', icon: <I.Page /> },
@@ -41,17 +42,25 @@ export function LeftPanel() {
 
 function Pages() {
     const page = useEditor((s) => s.page);
+    const custom = useEditor((s) => Object.keys(s.project.layout.pages));
+    const s = useEditor.getState;
     return (
         <div className="list">
-            {Object.entries(E.PAGES).map(([id, p]) => (
-                <div key={id} className={'list-item' + (id === page ? ' on' : '') + (p.runtime ? '' : ' disabled')}
-                    title={p.runtime ? '' : 'O runtime da TV ainda não aplica esta tela (Fase 5 do roadmap)'}>
-                    <I.Page />
-                    <span className="grow">{p.label}</span>
-                    {!p.runtime && <span className="badge">em breve</span>}
-                </div>
-            ))}
-            <p className="panel-note">Nesta versão o runtime da TV aplica a tela inicial. As outras telas entram na Fase 5.</p>
+            {Object.entries(E.PAGES).map(([id, p]) => {
+                const isCustom = custom.includes(id);
+                return (
+                    <div key={id} className={'list-item page-item' + (id === page ? ' on' : '')} role="button" tabIndex={0}
+                        onClick={() => s().setPage(id)} onKeyDown={(e) => e.key === 'Enter' && s().setPage(id)}>
+                        <I.Page />
+                        <span className="grow">
+                            <span className="page-name">{p.label}</span>
+                            <span className="page-hint">{id === 'home' ? 'Tela principal do launcher' : PAGE_HINTS[id]}</span>
+                        </span>
+                        {id !== 'home' && <span className={'badge' + (isCustom ? ' custom' : '')}>{isCustom ? 'personalizada' : 'original'}</span>}
+                    </div>
+                );
+            })}
+            <p className="panel-note">Telas "originais" usam o visual do launcher. Abra uma e clique em "Personalizar esta tela" para editá-la. As funções (salvar, clima, fechar) continuam as do launcher.</p>
         </div>
     );
 }
@@ -207,7 +216,12 @@ function Components() {
     const userBlocks = useEditor((s) => s.project.blocks || []);
     const [renaming, setRenaming] = useState<string | null>(null);
     const groups: Record<string, string[]> = {};
-    for (const [type, def] of Object.entries(E.registry)) (groups[def.category] ||= []).push(type);
+    const page = useEditor((st) => st.page);
+    // Launcher widgets are listed for the screen they belong to.
+    for (const [type, def] of Object.entries(E.registry)) {
+        if (def.slot && (def.page || 'home') !== page) continue;
+        (groups[def.category] ||= []).push(type);
+    }
     const s = useEditor.getState;
     const blockRow = (b: Block, user: boolean) => (
         <div key={b.id} className="block-item" draggable

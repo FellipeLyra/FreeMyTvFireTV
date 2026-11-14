@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useEditor } from '../src/store/editor';
+import { useEditor, selectRoot } from '../src/store/editor';
 import { blankLayout, newProject, parseProject, serializeProject } from '../src/model/project';
 import * as T from '../src/model/tree';
 import { buildPackage } from '../src/lib/pack';
@@ -178,5 +178,44 @@ describe('stacks and blocks', () => {
         s().select(['apps']);
         s().saveSelectionAsBlock();
         expect(s().project.blocks).toHaveLength(1); // launcher widgets cannot become blocks
+    });
+});
+
+describe('screens', () => {
+    it('switches screens, customizes one from the original and goes back', () => {
+        s().setPage('weather');
+        expect(s().page).toBe('weather');
+        expect(selectRoot(s()).id).toBe('__original');
+        s().addNode('text');
+        expect(s().project.layout.pages.weather).toBeUndefined(); // must customize first
+        s().customizePage('weather');
+        expect(selectRoot(s()).children!.map((c) => c.type)).toEqual(['weather.header', 'weather.current', 'weather.hourly', 'weather.sun', 'weather.close']);
+        expect(E.validate(s().project.layout).errors).toEqual([]);
+        s().updatePanel((p) => { p.placement = 'center'; p.width = 720; });
+        expect((s().project.layout.pages.weather as { panel?: unknown }).panel).toEqual({ placement: 'center', width: 720 });
+        s().resetPage('weather');
+        expect(s().project.layout.pages.weather).toBeUndefined();
+        s().undo();
+        expect(s().project.layout.pages.weather).toBeTruthy();
+        s().setPage('home');
+    });
+    it('every screen template is valid as it comes', () => {
+        for (const pid of ['weather', 'settings', 'screensaver', 'messages']) {
+            s().setPage(pid);
+            s().customizePage(pid);
+        }
+        const v = E.validate(s().project.layout);
+        expect(v.errors).toEqual([]);
+        s().setPage('home');
+    });
+    it('removing a required settings part is reported right away', () => {
+        s().setPage('settings');
+        s().customizePage('settings');
+        useEditor.setState({ toasts: [] });
+        s().select(['settings-actions']);
+        s().deleteSelection();
+        expect(s().validation.errors.some((e) => /Botões Salvar/.test(e.message))).toBe(true);
+        expect(s().toasts.some((t) => /Mudança inválida/.test(t.text))).toBe(true);
+        s().setPage('home');
     });
 });

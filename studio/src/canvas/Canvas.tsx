@@ -6,6 +6,7 @@ import type { LayoutNode, Rect } from '../model/types';
 import { PreviewFrame, STAGE_H, STAGE_W } from './preview';
 import { ContextMenu, type MenuItem } from '../ui/ContextMenu';
 import { BUILTIN_BLOCKS, type Block } from '../model/blocks';
+import { PAGE_HINTS } from '../model/pages';
 
 export let preview: PreviewFrame | null = null;
 
@@ -57,7 +58,7 @@ export function Canvas() {
 
     const measure = useCallback(() => {
         if (!preview?.ready) return;
-        const next = preview.measure();
+        const next = preview.measure(useEditor.getState().page);
         const cur = useEditor.getState().rects;
         if (JSON.stringify(next) !== JSON.stringify(cur)) useEditor.getState().setRects(next);
     }, []);
@@ -95,6 +96,7 @@ export function Canvas() {
         if (!ready || !preview) return;
         const res = preview.render(project.layout, project.assetData);
         useEditor.getState().setRenderErrors(res.ok ? [] : res.errors);
+        preview.showPage(page);
         measure();
         // Widgets fill in asynchronously (weather, posters), so measure again shortly after.
         const t = setTimeout(measure, 300);
@@ -183,7 +185,7 @@ export function Canvas() {
     };
 
     const nodeAt = (x: number, y: number, exclude?: string): LayoutNode | null => {
-        const ids = preview?.hit(x, y) || [];
+        const ids = preview?.hit(x, y, useEditor.getState().page) || [];
         const r = selectRoot(useEditor.getState());
         for (const id of ids) {
             if (exclude && (id === exclude || T.isDescendant(r, exclude, id))) continue;
@@ -197,7 +199,7 @@ export function Canvas() {
     const dropTargetAt = (x: number, y: number, draggedId: string | null, size: { w: number; h: number }): DropTarget | null => {
         const s = useEditor.getState();
         const r = selectRoot(s);
-        const ids = preview?.hit(x, y) || [];
+        const ids = preview?.hit(x, y, useEditor.getState().page) || [];
         let container: LayoutNode | null = null;
         for (const id of ids) {
             if (draggedId && (id === draggedId || T.isDescendant(r, draggedId, id))) continue;
@@ -500,6 +502,15 @@ export function Canvas() {
                 )}
             </div>
             {!ready && <div className="canvas-loading">Carregando o runtime da TV…</div>}
+            {ready && mode === 'edit' && !project.layout.pages[page] && (
+                <div className="page-original">
+                    <div>
+                        <strong>{E.PAGES[page]?.label}: visual original</strong>
+                        <span>{PAGE_HINTS[page]} Esta tela ainda não faz parte do layout.</span>
+                    </div>
+                    <button className="btn primary" onClick={() => useEditor.getState().customizePage(page)}>Personalizar esta tela</button>
+                </div>
+            )}
             {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
         </div>
     );

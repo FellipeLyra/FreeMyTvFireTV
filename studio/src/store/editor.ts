@@ -10,6 +10,7 @@ import type { Anchor, Asset, LayoutNode, Project, Rect, ValidationResult } from 
 import * as T from '../model/tree';
 import { newProject } from '../model/project';
 import type { Block } from '../model/blocks';
+import { defaultPage } from '../model/pages';
 
 const HISTORY_LIMIT = 200;
 const COALESCE_MS = 700;
@@ -63,6 +64,10 @@ export interface EditorState {
     setZoom(zoom: number, pan?: { x: number; y: number }): void;
     setPan(pan: { x: number; y: number }): void;
     setLeftTab(tab: LeftTab): void;
+    setPage(page: string): void;
+    customizePage(page: string): void;
+    resetPage(page: string): void;
+    updatePanel(fn: (panel: { placement?: string; width?: number; height?: number }) => void, key?: string): void;
     toggle(key: 'showSafeArea' | 'snap'): void;
     toast(text: string, kind?: Toast['kind']): void;
     dismissToast(id: number): void;
@@ -102,7 +107,11 @@ export interface EditorState {
     removeBlock(id: string): void;
 }
 
-const root = (p: Project | Draft<Project>, page: string) => p.layout.pages[page].root as LayoutNode;
+// A screen the layout does not customize yet is shown with its original look; editing
+// it starts with "Personalizar esta tela". Until then this empty placeholder stands in.
+const EMPTY_ROOT: LayoutNode = Object.freeze({ id: '__original', type: 'frame', children: [] }) as LayoutNode;
+const root = (p: Project | Draft<Project>, page: string) => (p.layout.pages[page] ? p.layout.pages[page].root : EMPTY_ROOT) as LayoutNode;
+export const pageIsCustom = (p: Project, page: string) => !!p.layout.pages[page];
 
 function validate(project: Project): ValidationResult {
     return E.validate(project.layout, { studio: true });
@@ -127,6 +136,10 @@ export const useEditor = create<EditorState>((set, get) => {
 
     /** Apply a recipe to the current page root, with history. Errors become toasts. */
     function edit(label: string, fn: (r: LayoutNode, p: Draft<Project>) => void, key?: string) {
+        if (!get().project.layout.pages[get().page]) {
+            get().toast('esta tela ainda usa o visual original; clique em "Personalizar esta tela" primeiro', 'error');
+            return;
+        }
         try {
             get().commit(label, (p) => fn(root(p, get().page) as LayoutNode, p), key);
         } catch (e) {
@@ -198,7 +211,7 @@ export const useEditor = create<EditorState>((set, get) => {
         load(project, fileName, handle = null) {
             set({
                 project, past: [], future: [], dirty: false, fileName, fileHandle: handle, selection: [], hover: null,
-                rects: {}, coalesce: null, validation: validate(project), page: 'home',
+                rects: {}, coalesce: null, validation: validate(project), page: 'home', mode: 'edit',
             });
         },
         markSaved(fileName, handle) {
@@ -212,6 +225,34 @@ export const useEditor = create<EditorState>((set, get) => {
         setZoom(zoom, pan) { set({ zoom: Math.min(4, Math.max(0.1, zoom)), ...(pan ? { pan } : {}) }); },
         setPan(pan) { set({ pan }); },
         setLeftTab(leftTab) { set({ leftTab }); },
+        setPage(page) {
+            if (!E.PAGES[page] || page === get().page) return;
+            set({ page, selection: [], hover: null, rects: {}, mode: 'edit' });
+        },
+        customizePage(page) {
+            const def = defaultPage(page);
+            if (!def || get().project.layout.pages[page]) return;
+            get().commit('personalizar tela', (p) => { p.layout.pages[page] = JSON.parse(JSON.stringify(def)); });
+            set({ selection: [def.root.id] });
+            get().toast(`"${E.PAGES[page].label}" agora faz parte do layout, igual ao original. Edite à vontade.`, 'success');
+        },
+        resetPage(page) {
+            if (page === 'home') return;
+            get().commit('voltar ao original', (p) => { delete p.layout.pages[page]; });
+            set({ selection: [] });
+            get().toast(`"${E.PAGES[page].label}" voltou ao visual original`);
+        },
+        updatePanel(fn, key) {
+            const page = get().page;
+            get().commit('painel', (p) => {
+                const pg = p.layout.pages[page] as { panel?: { placement?: string; width?: number; height?: number } } | undefined;
+                if (!pg) return;
+                pg.panel = pg.panel || {};
+                fn(pg.panel);
+                for (const k of Object.keys(pg.panel) as (keyof typeof pg.panel)[]) if (pg.panel[k] === undefined) delete pg.panel[k];
+                if (!Object.keys(pg.panel).length) delete pg.panel;
+            }, key ? 'panel.' + key : undefined);
+        },
         toggle(key) { set({ [key]: !get()[key] } as Partial<EditorState>); },
         toast(text, kind = 'info') {
             const id = ++toastSeq;

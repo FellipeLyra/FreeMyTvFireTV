@@ -208,3 +208,31 @@ test('example layouts with content blocks are valid and need no app shelf warnin
     assert.equal(validation.ok, true, messages(validation));
     assert.equal(validation.warnings.length, 0, JSON.stringify(validation.warnings));
 });
+
+test('screens: widgets belong to their screen, required ones cannot be removed', () => {
+    const lay = (pages) => ({ schemaVersion: 1, id: 't', name: 'T', pages: { home: { root: { id: 'root', type: 'stack', children: [{ id: 'apps', type: 'launcher.app-shelf' }] } }, ...pages } });
+    const settings = (children, panel) => ({ settings: { ...(panel ? { panel } : {}), root: { id: 's', type: 'stack', children } } });
+    const ok = lay(settings([{ id: 'p', type: 'settings.preferences' }, { id: 'a', type: 'settings.actions' }], { placement: 'right', width: 900 }));
+    assert.equal(E.validate(ok).ok, true, messages(E.validate(ok)));
+    assert.match(messages(E.validate(lay(settings([{ id: 'p', type: 'settings.preferences' }])))), /precisa de "Botões Salvar/);
+    assert.match(messages(E.validate(lay(settings([{ id: 'p', type: 'settings.preferences' }, { id: 'a', type: 'settings.actions' }, { id: 'w', type: 'weather.current' }])))), /pertence à tela "Clima"/);
+    assert.equal(E.validate(lay(settings([{ id: 'p', type: 'settings.preferences' }, { id: 'a', type: 'settings.actions' }], { placement: 'bottom' }))).ok, false);
+    assert.equal(E.validate(lay(settings([{ id: 'p', type: 'settings.preferences' }, { id: 'a', type: 'settings.actions' }], { width: 100 }))).ok, false);
+    // A home widget cannot be used on another screen, nor the other way round.
+    assert.match(messages(E.validate(lay({ weather: { root: { id: 'w', type: 'stack', children: [{ id: 'x', type: 'launcher.clock' }] } } }))), /pertence à tela "Tela inicial"/);
+});
+
+test('screens: messages only change their look; screensaver warns about static elements', () => {
+    const lay = (pages) => ({ schemaVersion: 1, id: 't', name: 'T', pages: { home: { root: { id: 'root', type: 'stack', children: [{ id: 'apps', type: 'launcher.app-shelf' }] } }, ...pages } });
+    assert.equal(E.validate(lay({ messages: { panel: { placement: 'bottom' }, root: { id: 'm', type: 'frame', style: { radius: 20 } } } })).ok, true);
+    assert.match(messages(E.validate(lay({ messages: { root: { id: 'm', type: 'frame', children: [{ id: 't', type: 'text', constraints: { h: { anchor: 'start', offset: 0, size: 10 }, v: { anchor: 'start', offset: 0, size: 10 } } }] } } }))), /só o visual/);
+    const ss = E.validate(lay({ screensaver: { root: { id: 's', type: 'stack', children: [{ id: 'c', type: 'screensaver.clock', props: { clockSize: 200, showDate: false } }, { id: 'logo', type: 'text', props: { text: 'Oi' } }] } } }));
+    assert.equal(ss.ok, true);
+    assert.match(ss.warnings.map((w) => w.message).join(' '), /OLED/);
+    assert.match(messages(E.validate(lay({ screensaver: { root: { id: 's', type: 'stack', children: [] } } }))), /Relógio do protetor/);
+});
+
+test('example layout with every screen is valid', () => {
+    const { validation } = prepare(join(EX, 'all-screens.json'), join(EX, 'all-screens-assets'));
+    assert.equal(validation.ok, true, messages(validation));
+});
