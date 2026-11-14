@@ -573,7 +573,8 @@
             if (!registry[page.root.type] || !registry[page.root.type].container) r.error('pages.' + pid + '.root', 'a raiz precisa ser stack ou frame');
             validateNode(r, page.root, 'pages.' + pid + '.root', ctx, 0, null);
             if (pid === 'home') {
-                if (!ctx.focusable.length) r.error('pages.home', 'nenhum elemento navegável pelo controle; o layout seria inutilizável');
+                // In the Studio an unfinished page is allowed; export and the TV are strict.
+                if (!ctx.focusable.length) (opts.studio ? r.warn : r.error).call(r, 'pages.home', 'nenhum elemento navegável pelo controle; o layout seria inutilizável');
                 if (!ctx.slots['launcher.app-shelf']) r.warn('pages.home', 'sem a prateleira de apps');
                 if (!ctx.settingsReachable) r.warn('pages.home', 'sem botão para Personalizar; ele continua acessível pela tecla ≡ do controle');
             }

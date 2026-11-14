@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Window basics only; the Studio needs no native APIs yet.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "freemytv-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Free My TV Studio: visual layout editor for the Free My TV launcher",
+  "scripts": {
+    "runtime": "node scripts/copy-runtime.mjs",
+    "dev": "npm run runtime && vite",
+    "build": "npm run runtime && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "desktop": "tauri dev",
+    "desktop:build": "tauri build",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "immer": "10.1.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zustand": "4.5.5"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vitest": "2.1.8"
+  }
+}

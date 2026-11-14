@@ -187,7 +187,7 @@
             }
         }
 
-        var anim = !reducedMotion && E.enterAnimation(node);
+        var anim = !reducedMotion && !ctx.noAnim && E.enterAnimation(node);
         if (anim && el.animate) {
             var from = {}, to = { opacity: el.style.opacity || '1' };
             for (var k in anim.from) from[k] = anim.from[k];
@@ -229,7 +229,9 @@
      */
     function render(input, opts) {
         opts = opts || {};
-        var result = E.validate(input);
+        // opts.preview: Studio canvas. Unfinished layouts are drawn and enter
+        // animations only play when opts.animate is set.
+        var result = E.validate(input, opts.preview ? { studio: true } : undefined);
         if (!result.ok) {
             api.lastError = result.errors;
             return result;
@@ -245,7 +247,8 @@
                 var a = assetsById[id];
                 return a ? '/userlayout/assets/' + encodeURIComponent(a.file) : null;
             },
-            initial: null
+            initial: null,
+            noAnim: !!opts.preview && !opts.animate
         };
         try {
             var root = build(layout.pages.home.root, null, 0, ctx);
@@ -264,7 +267,7 @@
             api.active = layout;
             document.body.classList.add('fmtv-layout');
             refreshNav(ctx.initial);
-            if (typeof mainNavItems !== 'undefined' && !mainNavItems.length) throw new Error('nenhum elemento navegável ficou visível na tela');
+            if (!opts.preview && typeof mainNavItems !== 'undefined' && !mainNavItems.length) throw new Error('nenhum elemento navegável ficou visível na tela');
         } catch (e) {
             clear();
             api.lastError = [{ path: '', message: String(e && e.message || e) }];
@@ -320,7 +323,7 @@
     function boot() {
         // Studio preview: the layout is handed over by the editor, never by the network.
         if (window.__fmtvPreviewMode) {
-            if (window.__fmtvPreviewLayout) render(window.__fmtvPreviewLayout, { assetUrl: window.__fmtvPreviewAssetUrl });
+            if (window.__fmtvPreviewLayout) render(window.__fmtvPreviewLayout, { assetUrl: window.__fmtvPreviewAssetUrl, preview: true });
             return;
         }
         var json = call('getLayoutJson');
@@ -345,7 +348,7 @@
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('message', function(ev) {
         if (!window.__fmtvPreviewMode || !ev.data || ev.data.type !== 'fmtv:preview') return;
-        var res = render(ev.data.layout, { assetUrl: window.__fmtvPreviewAssetUrl });
+        var res = render(ev.data.layout, { assetUrl: window.__fmtvPreviewAssetUrl, preview: true, animate: !!ev.data.animate });
         if (ev.source && ev.source.postMessage) {
             ev.source.postMessage({ type: 'fmtv:rendered', ok: res.ok, errors: res.errors, warnings: res.warnings }, '*');
         }

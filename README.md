@@ -8,7 +8,7 @@
 
 Seus apps de streaming numa prateleira de vidro, clima ao vivo que acompanha o pôr do sol e os filmes e séries em alta da semana.
 
-[Telas](#-telas) · [Instalação](#-instalação) · [Botão Home](#-fazer-o-botão-home-abrir-o-free-my-tv) · [Layouts](#-layouts-personalizados) · [Como funciona](#%EF%B8%8F-como-funciona) · [Arquitetura](#-arquitetura) · [Desenvolvimento](#-desenvolvimento) · [Roadmap](#%EF%B8%8F-roadmap-free-my-tv-studio)
+[Telas](#-telas) · [Instalação](#-instalação) · [Botão Home](#-fazer-o-botão-home-abrir-o-free-my-tv) · [Layouts](#-layouts-personalizados) · [Studio](#%EF%B8%8F-free-my-tv-studio-editor-visual) · [Como funciona](#%EF%B8%8F-como-funciona) · [Arquitetura](#-arquitetura) · [Desenvolvimento](#-desenvolvimento) · [Roadmap](#%EF%B8%8F-roadmap-free-my-tv-studio)
 
 </div>
 
@@ -122,7 +122,7 @@ A tela inicial pode ser **remontada por um arquivo de layout**, sem recompilar o
 - cores e tokens, imagens de fundo, textos, botões e animações de entrada e de foco;
 - onde ficam os widgets do launcher: prateleira de apps, clima, relógio, data e filmes em alta.
 
-O formato completo está em **[docs/layouts.md](docs/layouts.md)**. Este é o formato que o futuro **Free My TV Studio** (editor visual para PC) vai gerar; veja o [Roadmap](#%EF%B8%8F-roadmap-free-my-tv-studio). Por enquanto os layouts são escritos à mão e publicados pela CLI.
+O formato completo está em **[docs/layouts.md](docs/layouts.md)**. Os layouts podem ser criados no **[Free My TV Studio](#%EF%B8%8F-free-my-tv-studio-editor-visual)**, o editor visual para PC, ou escritos à mão, e são publicados pela CLI.
 
 <table>
 <tr>
@@ -165,6 +165,27 @@ As imagens de um layout ficam na pasta `<nome-do-layout>-assets/`, ao lado do `.
 - **Pelo PC:** `node tools/fmtv.mjs reset`.
 - **Automático:** se um layout é inválido ou não chega a aparecer na tela, o app volta ao anterior sozinho.
 - **Sem layout publicado**, a tela é exatamente a original.
+
+## 🖌️ Free My TV Studio (editor visual)
+
+Editor para PC, em [`studio/`](studio/), no estilo das ferramentas de design de interface. O canvas roda **o próprio runtime da TV**, então o que aparece no editor é o que a TV desenha, com clima, apps e filmes de verdade.
+
+![Free My TV Studio](docs/screenshots/studio-editor.jpg)
+
+O que já funciona:
+- stacks com auto layout (aninhadas, gap, padding, alinhamento, preencher ou ajustar) e **posicionamento absoluto** com constraints;
+- arrastar com guias inteligentes, alças de redimensionar e reordenação por drag and drop;
+- painel de camadas, biblioteca de componentes, assets e propriedades;
+- tema com tokens, animações, desfazer e refazer;
+- projetos com autosave e **Prévia com o controle remoto** simulado;
+- exportação do `.fmtv`.
+
+```
+cd studio && npm install && npm run dev     # navegador: http://127.0.0.1:5610
+npm run desktop                             # app desktop (Tauri; requer Rust)
+```
+
+Detalhes, atalhos e testes: **[studio/README.md](studio/README.md)**.
 
 ## ⚙️ Como funciona
 
@@ -346,10 +367,10 @@ O objetivo é um editor visual para PC (no estilo de ferramentas de design de in
 |---|---|---|
 | 1. Auditoria e arquitetura | Mapear telas e widgets; schema v1; contratos entre editor, TV e publicação | ✅ Feito ([docs/layouts.md](docs/layouts.md)) |
 | 2. Runtime e vertical slice | Motor compartilhado, runtime na TV, stacks e posicionamento absoluto, importação segura, rollback, CLI e ADB | ✅ Feito. APK compila e os testes automáticos passam; **falta validar num Fire TV** |
-| 3. Studio desktop | App de PC (Tauri + React + TypeScript): canvas 1920×1080, camadas, propriedades, drag and drop, desfazer/refazer, salvar projeto | ⏳ Próxima |
-| 4. Biblioteca de blocos | Mais componentes (carrossel, grade, banner, ícones, gradientes prontos) | ⏳ |
+| 3. Studio desktop | App de PC (Tauri + React + TypeScript): canvas 1920×1080, camadas, propriedades, drag and drop, desfazer/refazer, salvar projeto | ✅ Feito ([studio/](studio/)). 26 testes unitários + 16 verificações ponta a ponta no Chrome |
+| 4. Biblioteca de blocos | Mais componentes (carrossel, grade, banner, ícones, gradientes prontos) | ⏳ Próxima |
 | 5. Todas as telas | Clima, Personalizar, protetor de tela, avisos e modais no runtime | ⏳ (o schema já aceita essas páginas) |
-| 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime e simulador de controle remoto com a mesma navegação | ⏳ |
+| 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime e simulador de controle remoto com a mesma navegação | 🟡 Base pronta: a Prévia e o controle virtual já existem; faltam ordem de foco visual, alertas de acessibilidade e resoluções 720p/4K |
 | 7. Publicação ADB no Studio | Descoberta de aparelhos, envio, rollback e histórico pelo editor (a base já está em `tools/lib/adb.mjs`) | ⏳ |
 | 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | ⏳ |
 | 9. Refinamento | Desempenho em aparelhos fracos, testes no aparelho, instalador do Studio | ⏳ |
