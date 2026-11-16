@@ -468,6 +468,107 @@
         actions.insertBefore(b, actions.firstChild);
     }
 
+    /* ---------------- publishing over the internet (CloudSync.kt) ---------------- */
+
+    // A section in Customize to pair this TV with the Studio through a server the
+    // person hosts (docs/cloud.md). Only appears when the app supports it.
+    function setupCloud() {
+        var b = bridge();
+        if (!b || typeof b.cloudInfo !== 'function') return;
+        var modal = document.getElementById('settingsModal');
+        // Inside the Preferences block (the "settings.preferences" slot), so it goes
+        // wherever a layout that customizes this screen puts the preferences.
+        var firstRow = modal && modal.querySelector('.settings-row');
+        var prefs = firstRow && firstRow.parentNode;
+        if (!prefs || document.getElementById('fmtvCloud')) return;
+        function node(tag, cls, text, style) {
+            var e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (text) e.textContent = text;
+            if (style) e.setAttribute('style', style);
+            return e;
+        }
+        var box = node('div', '', '', 'margin-top:18px');
+        box.id = 'fmtvCloud';
+        box.appendChild(node('div', 'modal-section-title', tr('3. Publish over the internet (Free My TV Studio)', '3. Publicar pela internet (Free My TV Studio)')));
+        var row = node('div', 'settings-row');
+        var g1 = node('div', 'field-group', '', 'grid-column: span 2;');
+        g1.appendChild(node('label', '', tr('Server address (https://)', 'Endereço do servidor (https://)')));
+        var input = node('input', 'field-input modal-nav');
+        input.type = 'text';
+        input.id = 'fmtvCloudServer';
+        input.placeholder = 'https://tv.seudominio.com';
+        g1.appendChild(input);
+        var g2 = node('div', 'field-group');
+        g2.appendChild(node('label', '', tr('Status', 'Situação')));
+        var state = node('div', '', '', 'font-size:15px;line-height:1.35;color:var(--text-primary)');
+        g2.appendChild(state);
+        row.appendChild(g1);
+        row.appendChild(g2);
+        box.appendChild(row);
+        var codeLine = node('div', '', '', 'display:none;margin:14px 0 4px;align-items:center;gap:18px');
+        var code = node('div', '', '', 'font:700 44px/1 ui-monospace,Consolas,monospace;letter-spacing:6px;color:var(--accent,#64d2ff)');
+        var codeHint = node('div', '', '', 'font-size:14px;color:var(--text-secondary);max-width:520px');
+        codeLine.appendChild(code);
+        codeLine.appendChild(codeHint);
+        box.appendChild(codeLine);
+        var buttons = node('div', '', '', 'display:flex;gap:12px;margin-top:12px');
+        var pair = node('button', 'btn-secondary modal-nav');
+        var unpair = node('button', 'btn-secondary modal-nav', tr('Unpair', 'Desparear'));
+        buttons.appendChild(pair);
+        buttons.appendChild(unpair);
+        box.appendChild(buttons);
+        var err = node('div', '', '', 'margin-top:8px;font-size:13px;color:#ff8a80');
+        box.appendChild(err);
+        prefs.appendChild(box);
+
+        var shape = '';
+        function update(info) {
+            info = info || {};
+            if (document.activeElement !== input) input.value = info.server || '';
+            var paired = !!info.paired;
+            var who = (info.publishers || []).join(', ');
+            state.textContent = !info.registered ? tr('Not paired', 'Não pareada')
+                : paired ? tr('Paired with: ', 'Pareada com: ') + who + (info.online ? tr(' (connected)', ' (conectada)') : '')
+                : tr('Waiting for the code', 'Esperando o código');
+            codeLine.style.display = info.pairCode ? 'flex' : 'none';
+            code.textContent = info.pairCode || '';
+            codeHint.textContent = tr('Type this code in the Studio: Device → Over the internet. It is valid for 10 minutes and works once.',
+                'Digite este código no Studio: Dispositivo → Pela internet. Vale por 10 minutos e funciona uma vez.');
+            pair.textContent = !info.registered ? tr('Pair with the Studio', 'Parear com o Studio') : tr('New code', 'Novo código');
+            unpair.style.display = info.registered ? '' : 'none';
+            err.textContent = info.error || '';
+            // Buttons came or went: the remote's list of Customize items must follow.
+            var now = unpair.style.display;
+            if (now !== shape && typeof modalOpen !== 'undefined' && modalOpen && typeof refreshModalNavList === 'function') refreshModalNavList();
+            shape = now;
+        }
+        function read() { try { update(JSON.parse(call('cloudInfo') || '{}')); } catch (e) {} }
+        function saveServer() {
+            var msg = call('cloudSetServer', input.value);
+            err.textContent = msg || '';
+            return !msg;
+        }
+        input.addEventListener('change', saveServer);
+        pair.addEventListener('click', function() {
+            if (input.value.trim() && !saveServer()) return;
+            err.textContent = tr('Contacting the server…', 'Falando com o servidor…');
+            call('cloudPair');
+        });
+        unpair.addEventListener('click', function() { call('cloudUnpair'); });
+        window.FMTVCloud = { update: update };
+        read();
+        // Fresh state every time Customize opens (the page adds the "active" class).
+        var wasOpen = false;
+        if (window.MutationObserver) {
+            new MutationObserver(function() {
+                var isOpen = modal.classList.contains('active');
+                if (isOpen && !wasOpen) read();
+                wasOpen = isOpen;
+            }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+        }
+    }
+
     /* ---------------- boot ---------------- */
 
     function boot() {
@@ -476,6 +577,7 @@
             if (window.__fmtvPreviewLayout) render(window.__fmtvPreviewLayout, { assetUrl: window.__fmtvPreviewAssetUrl, preview: true });
             return;
         }
+        setupCloud();
         var json = call('getLayoutJson');
         if (!json) return;
         var res = render(json);

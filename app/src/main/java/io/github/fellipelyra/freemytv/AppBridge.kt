@@ -28,6 +28,7 @@ class AppBridge(
     private val activity: Activity,
     private val webView: WebView,
     private val layouts: LayoutStore,
+    private val cloud: CloudSync? = null,
 ) {
 
     private val pm: PackageManager = activity.packageManager
@@ -36,6 +37,21 @@ class AppBridge(
     // ---- Published layouts (see fmtv/runtime.js and LayoutStore) ----
 
     /** JSON text of the layout to show, or "" for the built-in screen. Called once per page load. */
+    // ---- Publishing over the internet (see CloudSync and fmtv/runtime.js) ----
+
+    @JavascriptInterface
+    fun cloudInfo(): String = cloud?.info()?.toString() ?: ""
+
+    /** Returns an error message, or "" when the address was accepted. */
+    @JavascriptInterface
+    fun cloudSetServer(url: String): String = cloud?.setServer(url) ?: ""
+
+    @JavascriptInterface
+    fun cloudPair() { cloud?.startPairing() }
+
+    @JavascriptInterface
+    fun cloudUnpair() { cloud?.unpair() }
+
     @JavascriptInterface
     fun getLayoutJson(): String = layouts.activeLayoutJson() ?: ""
 

@@ -7,7 +7,7 @@ import { TEMPLATES } from './model/project';
 import { openProject, saveProject, download, clearAutosave } from './lib/storage';
 import { buildPackage, finalizeLayout } from './lib/pack';
 import { TV_RES, type TvRes } from './model/a11y';
-import { useDevices, isReady } from './store/devices';
+import { useDevices, isReady, CLOUD } from './store/devices';
 
 export async function doSave(saveAs = false) {
     const s = useEditor.getState();
@@ -49,7 +49,11 @@ export function TopBar() {
     const showFocusMap = useEditor((s) => s.showFocusMap);
     const tvRes = useEditor((s) => s.tvRes);
     const s = useEditor.getState();
-    const device = useDevices((d) => d.devices.find((x) => x.serial === d.selected) || null);
+    const adbDevice = useDevices((d) => d.devices.find((x) => x.serial === d.selected) || null);
+    const cloudTarget = useDevices((d) => d.cloud.find((t) => CLOUD + t.deviceId === d.selected) || null);
+    // The chosen TV, over ADB or over the internet, in one shape for the buttons.
+    const device = cloudTarget ? { label: cloudTarget.label + ' · internet', serial: new URL(cloudTarget.server).host, ready: true }
+        : adbDevice ? { label: adbDevice.label, serial: adbDevice.serial, ready: isReady(adbDevice) } : null;
     const publishing = useDevices((d) => !!d.job && d.job.op === 'publish' && !d.job.done);
     const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
 
@@ -135,14 +139,14 @@ export function TopBar() {
                 <button className="tb-btn" data-testid="devices-btn" onClick={() => useDevices.getState().setOpen(true)}
                     title={device ? `${device.label} (${device.serial}): trocar de aparelho, voltar ao layout anterior, histórico` : 'Conectar um Fire TV pelo ADB'}>
                     <I.Tv size={14} /> <span className="tb-device">{device ? device.label : 'Dispositivo'}</span>
-                    {device && <span className={'dot-state ' + (isReady(device) ? 'ok' : 'warn')} />}
+                    {device && <span className={'dot-state ' + (device.ready ? 'ok' : 'warn')} />}
                 </button>
                 <button className="tb-btn" onClick={(e) => open(e, [
                     { label: 'Pacote para a TV (.fmtv)', action: exportPackage },
                     { label: 'Layout (layout.json)', action: exportJson },
                 ])}><I.Export size={14} /> Exportar</button>
                 <button className="tb-btn primary" data-testid="publish-btn" disabled={publishing} onClick={() => useDevices.getState().publish()}
-                    title={device && isReady(device) ? `Publicar na TV ${device.label}: envia, aplica e espera a TV confirmar que desenhou` : 'Escolha um Fire TV para publicar'}>
+                    title={device && device.ready ? `Publicar na TV ${device.label}: envia, aplica e espera a TV confirmar que desenhou` : 'Escolha um Fire TV para publicar'}>
                     <I.Send size={14} /> {publishing ? 'Publicando…' : 'Publicar'}
                 </button>
             </div>

@@ -5,7 +5,8 @@
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const BASE = process.env.STUDIO_URL || 'http://127.0.0.1:5610';
 const SHOT = process.argv.includes('--shot') ? process.argv[process.argv.indexOf('--shot') + 1] : null;
@@ -63,6 +64,7 @@ async function screen(x, y) {
 const rect = (id) => evaluate(`${S}.rects[${JSON.stringify(id)}]`);
 const node = (id) => evaluate(`(() => { const r = ${S}.project.layout.pages.home.root; let f = null; (function w(n, p){ if (n.id === ${JSON.stringify(id)}) f = { node: n, parent: p && p.id }; (n.children||[]).forEach(c => w(c, n)); })(r, null); return f; })()`);
 
+let cloudProc = null, tvProc = null;
 const results = [];
 const pageErrors = [];
 function check(name, ok, detail = '') {
@@ -502,11 +504,107 @@ try {
         await key('Escape', 'Escape', 0, 27);
         check('Esc fecha a janela de dispositivos', !(await evaluate(`!!document.querySelector('[data-testid=devices-dialog]')`)));
     }
+
+    // Phase 8: publishing over the internet, with a real Free My TV Cloud server and a pretend TV.
+    console.log('\n[Studio e2e: publicação pela internet]');
+    {
+        const here = dirname(fileURLToPath(import.meta.url));
+        const repo = join(here, '..', '..');
+        const cloudPort = 5620 + Math.floor(Math.random() * 300);
+        const CLOUD_URL = `http://127.0.0.1:${cloudPort}`;
+        const cloudData = mkdtempSync(join(tmpdir(), 'fmtv-e2e-cloud-'));
+        cloudProc = spawn(process.execPath, [join(repo, 'server', 'fmtv-cloud.mjs'), '--port', String(cloudPort), '--host', '127.0.0.1', '--data', cloudData], { stdio: 'ignore' });
+        for (let i = 0; i < 50; i++) { try { if ((await fetch(CLOUD_URL + '/v1/health')).ok) break; } catch { await sleep(100); } }
+        tvProc = spawn(process.execPath, [join(repo, 'tools', 'test', 'fake-cloud-tv.mjs'), CLOUD_URL], { stdio: ['ignore', 'pipe', 'inherit'] });
+        const first = await new Promise((r) => { let b = ''; tvProc.stdout.on('data', (d) => { b += d; if (b.includes('\n')) r(JSON.parse(b.split('\n')[0])); }); });
+        const D = '__fmtvDevices.getState()';
+        const clickSel = async (sel) => {
+            const p = await evaluate(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+            if (!p) throw new Error('não encontrado: ' + sel);
+            await mouse('mouseMoved', p.x, p.y, 0); await mouse('mousePressed', p.x, p.y); await mouse('mouseReleased', p.x, p.y, 0);
+            await sleep(300);
+        };
+        const typeInto = async (sel, text) => {
+            await clickSel(sel);
+            await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65, commands: ['selectAll'] });
+            await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+            await send('Input.insertText', { text });
+        };
+        const jobDone = (ms = 30000) => waitFor(`${D}.job && ${D}.job.done`, ms);
+        const card = () => `document.querySelector('.dev-item[data-serial="cloud:${first.deviceId}"]')`;
+
+        await evaluate(`${S}.load(${S}.project, 'x'); __fmtvStudio.setState({ dirty: false }); localStorage.removeItem('fmtv.studio.devices')`);
+        await send('Page.navigate', { url: `${BASE}/?template=cinema` });
+        await waitFor(`window.__fmtvStudio && ${S}.project.layout.name === 'Cinema' && !!${S}.rects['big-clock']`);
+        await clickSel('[data-testid=devices-btn]');
+        await waitFor(`!!document.querySelector('[data-testid=cloud-server]')`);
+
+        await typeInto('[data-testid=cloud-server]', 'http://evil.example');
+        await typeInto('[data-testid=cloud-code]', first.pairCode);
+        await clickSel('[data-testid=cloud-code] ~ .btn.primary');
+        await jobDone();
+        check('servidor sem https é recusado antes de enviar o código', /https/.test(await evaluate(`${D}.job.message`)) && !(await evaluate(`${D}.job.ok`)), await evaluate(`${D}.job.message`));
+
+        await typeInto('[data-testid=cloud-server]', CLOUD_URL);
+        await typeInto('[data-testid=cloud-code]', 'AAAA-AAAA');
+        await clickSel('[data-testid=cloud-code] ~ .btn.primary');
+        await jobDone();
+        check('código errado: o servidor recusa e o Studio explica', /inválido ou expirado/.test(await evaluate(`${D}.job.message`)), await evaluate(`${D}.job.message`));
+
+        await typeInto('[data-testid=cloud-code]', first.pairCode.toLowerCase());
+        await clickSel('[data-testid=cloud-code] ~ .btn.primary');
+        await jobDone();
+        await waitFor(`!!${card()} && /conectada/.test(${card()}.textContent)`, 8000).catch(() => {});
+        check('código da TV: pareado, TV conectada e escolhida para publicar', (await evaluate(`${D}.job.ok`)) && /conectada/.test(await evaluate(`(${card()} || {}).textContent || ''`))
+            && (await evaluate(`${D}.selected`)) === 'cloud:' + first.deviceId, await evaluate(`${D}.job.message`));
+        check('a barra mostra a TV pela internet', /internet/.test(await evaluate(`document.querySelector('[data-testid=devices-btn]').textContent`)));
+
+        await key('Escape', 'Escape', 0, 27); // the dialog covers the top bar
+        await clickSel('[data-testid=publish-btn]');
+        await waitFor(`${D}.job && ${D}.job.op === 'publish' && ${D}.job.done`, 30000);
+        const j1 = await evaluate(`${D}.job`);
+        check('Publicar pela internet: o servidor confere, a TV aplica e confirma', j1.ok && /confirmado na TV/.test(j1.message) && j1.logs.some((l) => /conferiu/.test(l)), JSON.stringify(j1));
+        await waitFor(`/Na TV: Cinema confirmado/.test(${card()}.textContent)`, 8000).catch(() => {});
+        check('o cartão mostra o layout confirmado na TV', /Na TV: Cinema confirmado/.test(await evaluate(`${card()}.textContent`)));
+
+        await evaluate(`${S}.commit('nome', p => { p.layout.name = 'Teste falha-na-tv'; })`);
+        await clickSel(`.dev-item[data-serial="cloud:${first.deviceId}"] [data-testid=cloud-publish]`);
+        await jobDone();
+        const j2 = await evaluate(`${D}.job`);
+        check('layout que falha na TV: volta sozinha ao anterior e o Studio mostra o motivo', !j2.ok && /falhou na TV/.test(j2.message) && /layout anterior/.test(j2.message), JSON.stringify(j2));
+
+        await clickSel(`.dev-item[data-serial="cloud:${first.deviceId}"] .dev-actions .btn:nth-of-type(3)`); // Tela original
+        await jobDone();
+        await sleep(600);
+        const afterReset = await evaluate(`${card()}.textContent`);
+        check('"Tela original" pela internet', /Na TV: tela original/.test(afterReset) && /Anterior: Cinema/.test(afterReset), afterReset);
+        await clickSel(`.dev-item[data-serial="cloud:${first.deviceId}"] .dev-actions .btn:nth-of-type(2)`); // Voltar ao anterior
+        await jobDone();
+        await sleep(600);
+        check('"Voltar ao anterior" pela internet', /Na TV: Cinema confirmado/.test(await evaluate(`${card()}.textContent`)), await evaluate(`${card()}.textContent`));
+
+        await clickSel(`.dev-item[data-serial="cloud:${first.deviceId}"] .dev-actions .btn:nth-of-type(4)`); // Histórico
+        const hist = await evaluate(`(document.querySelector('[data-testid=cloud-log]') || {}).textContent || ''`);
+        check('histórico da TV guardado no servidor', /confirmado na TV/.test(hist) && /falhou na TV/.test(hist) && /tela original/.test(hist), hist.slice(0, 300));
+        if (SHOT) {
+            const shotC = await send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(SHOT.replace(/\.png$/, '-cloud.png'), Buffer.from(shotC.data, 'base64'));
+        }
+
+        const token = await evaluate(`JSON.parse(localStorage.getItem('fmtv.studio.devices')).cloud[0].token`);
+        await clickSel(`.dev-item[data-serial="cloud:${first.deviceId}"] .dev-actions .btn:nth-of-type(5)`); // Remover
+        await sleep(500);
+        const gone = (await fetch(`${CLOUD_URL}/v1/devices/${first.deviceId}`, { headers: { authorization: 'Bearer ' + token } })).status;
+        check('"Remover" revoga o acesso no servidor e some da lista', gone === 401 && !(await evaluate(`!!${card()}`)) && !(await evaluate(`localStorage.getItem('fmtv.studio.devices')`)).includes(token), String(gone));
+        await key('Escape', 'Escape', 0, 27);
+    }
 } catch (e) {
     check('execução', false, e.stack || String(e));
 } finally {
     try { ws?.close(); } catch { /* ignore */ }
     proc.kill();
+    cloudProc?.kill();
+    tvProc?.kill();
     await sleep(300);
     try { rmSync(profile, { recursive: true, force: true }); } catch { /* chrome may still hold files */ }
 }

@@ -8,7 +8,7 @@
 
 Seus apps de streaming numa prateleira de vidro, clima ao vivo que acompanha o pôr do sol e os filmes e séries em alta da semana.
 
-[Telas](#-telas) · [Instalação](#-instalação) · [Botão Home](#-fazer-o-botão-home-abrir-o-free-my-tv) · [Layouts](#-layouts-personalizados) · [Studio](#%EF%B8%8F-free-my-tv-studio-editor-visual) · [Como funciona](#%EF%B8%8F-como-funciona) · [Arquitetura](#-arquitetura) · [Desenvolvimento](#-desenvolvimento) · [Roadmap](#%EF%B8%8F-roadmap-free-my-tv-studio)
+[Telas](#-telas) · [Instalação](#-instalação) · [Botão Home](#-fazer-o-botão-home-abrir-o-free-my-tv) · [Layouts](#-layouts-personalizados) · [Studio](#%EF%B8%8F-free-my-tv-studio-editor-visual) · [Pela internet](docs/cloud.md) · [Como funciona](#%EF%B8%8F-como-funciona) · [Arquitetura](#-arquitetura) · [Desenvolvimento](#-desenvolvimento) · [Roadmap](#%EF%B8%8F-roadmap-free-my-tv-studio)
 
 </div>
 
@@ -17,8 +17,8 @@ Seus apps de streaming numa prateleira de vidro, clima ao vivo que acompanha o p
 Este projeto adapta para o Fire TV o [**Free My TV for LG webOS**](https://github.com/danielthejoker18/FreeMyTvWebOS), de Daniel (licença MIT). A interface é a mesma do original. O que muda é a camada que conversa com o aparelho: no LG ela usa os serviços do webOS e aqui usa o Android, que é a base do Fire OS.
 
 > **Status:** em desenvolvimento.
-> - O APK compila e os testes automáticos passam: 35 testes do motor de layout, da CLI e da ponte de publicação, os cenários do runtime no Chrome headless e, no Studio, 57 testes unitários e 73 verificações ponta a ponta no Chrome.
-> - A publicação pelo Studio foi testada com um **Fire TV simulado** (`tools/test/fake-adb.mjs`) e com o `adb` real deste PC, mas ainda não num aparelho.
+> - O APK compila e os testes automáticos passam: 46 testes do motor de layout, da CLI, da ponte ADB e do servidor de publicação pela internet; os cenários do runtime no Chrome headless; e, no Studio, 61 testes unitários e 84 verificações ponta a ponta no Chrome.
+> - A publicação pelo Studio (ADB e internet) foi testada com **Fire TVs simulados** (`tools/test/fake-adb.mjs` e `fake-cloud-tv.mjs`) e com o `adb` real deste PC, mas ainda não num aparelho.
 > - Nada foi testado num Fire TV de verdade ainda. As telas abaixo vêm da interface rodando no Chrome, com uma simulação dos apps instalados.
 > - Se algo não funcionar no seu aparelho, abra uma *issue* dizendo o modelo e a versão do Fire OS.
 
@@ -187,7 +187,8 @@ O que já funciona:
 - tema com tokens, animações, desfazer e refazer;
 - projetos com autosave e **Prévia com o controle remoto** simulado;
 - **mapa de foco** (quantos cliques até cada item e o que as setas não alcançam), **alertas de acessibilidade** (contraste, tamanho do texto, bordas cortadas pelo overscan) e **prévia por resolução** (720p, 1080p, 4K e tamanho real);
-- exportação do `.fmtv` e **publicação direta no Fire TV pelo ADB**: lista de aparelhos, conexão por IP, busca na rede, envio com progresso até a TV confirmar que desenhou, voltar ao anterior, tela original e histórico.
+- exportação do `.fmtv` e **publicação direta no Fire TV pelo ADB**: lista de aparelhos, conexão por IP, busca na rede, envio com progresso até a TV confirmar que desenhou, voltar ao anterior, tela original e histórico;
+- **publicação pela internet** com um servidor que você hospeda: a TV mostra um código, o Studio pareia e publica de qualquer lugar. Veja **[docs/cloud.md](docs/cloud.md)**.
 
 ```
 cd studio && npm install && npm run dev     # navegador: http://127.0.0.1:5610
@@ -246,6 +247,7 @@ flowchart LR
 | [`app/src/main/assets/web/firetv-bridge.js`](app/src/main/assets/web/firetv-bridge.js) | Implementa `webOS.service.request` em cima da ponte Android |
 | [`MainActivity.kt`](app/src/main/java/io/github/fellipelyra/freemytv/MainActivity.kt) | WebView em tela cheia servida por `https://appassets.androidplatform.net`, teclas Voltar e Menu, atualiza a lista de apps ao voltar |
 | [`AppBridge.kt`](app/src/main/java/io/github/fellipelyra/freemytv/AppBridge.kt) | Lista os apps (com banner/ícone em `data:` URL) e abre apps, trailers e configurações |
+| [`CloudSync.kt`](app/src/main/java/io/github/fellipelyra/freemytv/CloudSync.kt) | Publicação pela internet: pareamento, long poll, download, importação pelo `LayoutStore` e relatório ao servidor |
 | [`HomeButtonService.kt`](app/src/main/java/io/github/fellipelyra/freemytv/HomeButtonService.kt) | Serviço opcional que troca a tela da Amazon pelo Free My TV |
 | [`fmtv/engine.js`](app/src/main/assets/web/fmtv/engine.js) | Motor de layout compartilhado (TV, CLI, testes e futuro Studio): schema, validação, migrações, geração de CSS, navegação espacial |
 | [`fmtv/runtime.js`](app/src/main/assets/web/fmtv/runtime.js) | Monta o layout publicado sobre a página, move os widgets reais, cuida das setas e informa sucesso ou falha ao app |
@@ -253,6 +255,8 @@ flowchart LR
 | [`tools/fmtv.mjs`](tools/fmtv.mjs) | CLI: validar, empacotar, inspecionar e publicar por ADB |
 | [`tools/lib/bridge.mjs`](tools/lib/bridge.mjs) | Ponte local entre o Studio e o `adb`: só operações fixas, só pedidos do próprio Studio |
 | [`tools/test/fake-adb.mjs`](tools/test/fake-adb.mjs) | Fire TV simulado para testar a publicação sem aparelho (imita o `LayoutStore.kt`) |
+| [`server/fmtv-cloud.mjs`](server/fmtv-cloud.mjs) | Servidor de publicação pela internet: pareamento por código, tokens por TV, validação, long poll ([docs/cloud.md](docs/cloud.md)) |
+| [`tools/test/fake-cloud-tv.mjs`](tools/test/fake-cloud-tv.mjs) | Fire TV simulado pela internet (faz o que o `CloudSync.kt` faz) |
 | [`scripts/sync_web.py`](scripts/sync_web.py) | Copia a interface do projeto original e aplica as mudanças para o Fire TV (mantém `fmtv/` e `firetv-bridge.js`) |
 
 ### Publicando um layout
@@ -355,7 +359,7 @@ Cada mudança do script precisa encontrar exatamente o trecho esperado. Se o pro
 ### Testes
 
 ```
-node --test tools/test/          # motor de layout, pacote e ponte de publicação (35 testes)
+node --test tools/test/          # motor de layout, pacote, ponte ADB e servidor da internet (46 testes)
 node tools/browser-test.mjs      # runtime no Chrome headless (precisa do Chrome ou Edge)
 ```
 
@@ -383,8 +387,8 @@ O objetivo é um editor visual para PC (no estilo de ferramentas de design de in
 | 5. Todas as telas | Clima, Personalizar, protetor de tela e mensagens no runtime e no Studio | ✅ Feito. As funções seguem as do launcher, as partes obrigatórias são protegidas e tudo volta ao original sem o layout. Detalhes, confirmações e carregamento não existem no launcher e não foram inventados |
 | 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime, simulador de controle remoto, mapa de foco, alertas de acessibilidade e resoluções 720p/4K | ✅ Feito. O mapa usa a mesma regra de navegação da TV; contraste e tamanho são medidos no runtime |
 | 7. Publicação ADB no Studio | Descoberta de aparelhos, envio, rollback e histórico pelo editor | ✅ Feito. Ponte local (`tools/lib/bridge.mjs`) sobre a mesma biblioteca da CLI; testada com um Fire TV simulado. **Falta validar num Fire TV** |
-| 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | 🟡 Próxima |
-| 9. Refinamento | Desempenho em aparelhos fracos, testes no aparelho, instalador do Studio | ⏳ |
+| 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | ✅ Feito ([docs/cloud.md](docs/cloud.md)). Servidor sem dependências, `CloudSync.kt` na TV e seção no Studio; testado com uma TV simulada. **Falta validar com um Fire TV e um servidor público** |
+| 9. Refinamento | Desempenho em aparelhos fracos, testes no aparelho, instalador do Studio (com a ponte ADB embutida) | 🟡 Próxima |
 
 ## ⚠️ Limitações
 

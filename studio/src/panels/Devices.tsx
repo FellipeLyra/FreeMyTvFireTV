@@ -1,6 +1,7 @@
 // Phase 7: find Fire TVs, publish the layout, roll back, and see each TV's history.
 import { useEffect, useState } from 'react';
-import { useDevices, isReady } from '../store/devices';
+import { useDevices, isReady, CLOUD } from '../store/devices';
+import * as C from '../lib/cloud';
 import { useEditor } from '../store/editor';
 import * as D from '../lib/device';
 import { I } from '../ui/icons';
@@ -38,11 +39,19 @@ export function DevicesDialog() {
                     <h2>Dispositivos</h2>
                     {bridge && bridge !== 'checking' && bridge.simulated && <span className="badge sim" title={bridge.adb || ''}>Fire TV simulado</span>}
                     <span className="grow" />
-                    <button className="btn btn-small" onClick={() => s.refresh()} disabled={s.loading || busy}>{s.loading ? 'Atualizando…' : 'Atualizar'}</button>
+                    <button className="btn btn-small" onClick={() => { s.refresh(); s.refreshCloud(); }} disabled={s.loading || busy}>{s.loading ? 'Atualizando…' : 'Atualizar'}</button>
                     <button className="tb-icon" aria-label="Fechar" onClick={() => s.setOpen(false)} disabled={busy}><I.Close /></button>
                 </header>
 
                 <div className="dlg-body">
+                    {s.job && (
+                        <div className={'dev-job' + (s.job.done ? (s.job.ok ? ' ok' : s.job.warn ? ' warn' : ' err') : '')} data-testid="device-job" aria-live="polite">
+                            {s.job.logs.map((l, i) => <div key={i} className="job-line">· {l}</div>)}
+                            {!s.job.done && <div className="job-line spin">trabalhando…</div>}
+                            {s.job.done && <div className="job-final">{s.job.ok ? <I.Check size={14} /> : s.job.warn ? <I.Warning size={14} /> : <I.Error size={14} />} {s.job.message}</div>}
+                        </div>
+                    )}
+                    <h3 className="dev-section">Na rede local (ADB)</h3>
                     {bridge === 'checking' && <p className="panel-note">Procurando a ponte com a TV…</p>}
                     {bridge === null && (
                         <div className="dev-card warn">
@@ -79,13 +88,6 @@ export function DevicesDialog() {
                             )}
 
                             {s.error && <div className="dev-msg err">{s.error}</div>}
-                            {s.job && (
-                                <div className={'dev-job' + (s.job.done ? (s.job.ok ? ' ok' : s.job.warn ? ' warn' : ' err') : '')} data-testid="device-job" aria-live="polite">
-                                    {s.job.logs.map((l, i) => <div key={i} className="job-line">· {l}</div>)}
-                                    {!s.job.done && <div className="job-line spin">trabalhando…</div>}
-                                    {s.job.done && <div className="job-final">{s.job.ok ? <I.Check size={14} /> : s.job.warn ? <I.Warning size={14} /> : <I.Error size={14} />} {s.job.message}</div>}
-                                </div>
-                            )}
 
                             {!s.devices.length && !s.loading && (
                                 <div className="dev-card">
@@ -143,23 +145,93 @@ export function DevicesDialog() {
                                 })}
                             </div>
 
-                            {s.history.length > 0 && (
-                                <details className="dev-history">
-                                    <summary>Publicações feitas deste PC ({s.history.length})</summary>
-                                    {s.history.map((h, i) => (
-                                        <div key={i} className={'hist ' + (h.ok ? 'ok' : 'err')}>
-                                            <span className="when">{new Date(h.time).toLocaleString('pt-BR')}</span>
-                                            <span>{h.op === 'publish' ? `"${h.layout}" → ${h.device}` : `${h.op === 'rollback' ? 'Voltar' : 'Tela original'} em ${h.device}`}</span>
-                                            <span className="what">{h.message}</span>
-                                        </div>
-                                    ))}
-                                </details>
-                            )}
                         </>
+                    )}
+
+                    <CloudSection busy={busy} layoutName={layoutName} />
+
+                    {s.history.length > 0 && (
+                        <details className="dev-history">
+                            <summary>Publicações feitas deste PC ({s.history.length})</summary>
+                            {s.history.map((h, i) => (
+                                <div key={i} className={'hist ' + (h.ok ? 'ok' : 'err')}>
+                                    <span className="when">{new Date(h.time).toLocaleString('pt-BR')}</span>
+                                    <span>{h.op === 'publish' ? `"${h.layout}" → ${h.device}` : `${h.op === 'rollback' ? 'Voltar' : 'Tela original'} em ${h.device}`}</span>
+                                    <span className="what">{h.message}</span>
+                                </div>
+                            ))}
+                        </details>
                     )}
                 </div>
             </section>
         </div>
+    );
+}
+
+/** Phase 8: TVs paired through a Free My TV Cloud server. */
+function CloudSection({ busy, layoutName }: { busy: boolean; layoutName: string }) {
+    const s = useDevices();
+    const [server, setServer] = useState(s.cloudServer);
+    const [code, setCode] = useState('');
+    const [histFor, setHistFor] = useState<string | null>(null);
+    return (
+        <>
+            <h3 className="dev-section">Pela internet</h3>
+            <p className="panel-note">Publica de qualquer lugar, por um servidor Free My TV Cloud que você hospeda (veja <code>docs/cloud.md</code>). Na TV: <b>Personalizar → Publicar pela internet → Parear com o Studio</b>, e digite aqui o código que aparecer.</p>
+            <form className="dev-add" onSubmit={(e) => { e.preventDefault(); s.pairCloud(server, code).then(() => setCode('')); }}>
+                <input className="text-field" placeholder="https://tv.seudominio.com" value={server} onChange={(e) => setServer(e.target.value)}
+                    aria-label="Endereço do servidor" data-testid="cloud-server" />
+                <input className="text-field code-field" placeholder="Código da TV" value={code} maxLength={9} onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    aria-label="Código que aparece na TV" data-testid="cloud-code" />
+                <button className="btn primary" type="submit" disabled={busy || !server.trim() || code.replace(/[^A-Z0-9]/gi, '').length !== 8}>Parear</button>
+            </form>
+            <div className="dev-list">
+                {s.cloud.map((t) => {
+                    const key = CLOUD + t.deviceId;
+                    const d = s.cloudDevices[t.deviceId];
+                    const info = d && !('error' in d) ? d : null;
+                    const lay = info?.lastResult?.status;
+                    const on = s.selected === key;
+                    const waiting = info?.pending && info.pending.etag !== info.tvEtag;
+                    return (
+                        <article key={key} className={'dev-item' + (on ? ' on' : '')} data-serial={key}>
+                            <label className="dev-pick">
+                                <input type="radio" name="device" checked={on} disabled={!info} onChange={() => s.select(key)} />
+                                <div>
+                                    <div className="dev-name">{info ? C.labelOf(info) : t.label}</div>
+                                    <div className="dev-sub">{new URL(t.server).host}{info?.appVersion ? ` · Free My TV ${info.appVersion}` : ''}{info ? ` · vista ${C.seen(info.lastSeen)}` : ''}</div>
+                                </div>
+                            </label>
+                            {info ? <span className={'dev-state ' + (info.online ? 'ok' : 'warn')}>{info.online ? 'conectada' : 'fora do ar'}</span>
+                                : d ? <span className="dev-state err">sem acesso</span> : <span className="dev-state">…</span>}
+                            {d && 'error' in d && <p className="dev-hint">{d.error}</p>}
+                            {info && !info.online && <p className="dev-hint">A TV busca os layouts enquanto a tela inicial do Free My TV está aberta. O que você publicar agora fica guardado no servidor até lá.</p>}
+                            {info && (
+                                <div className="dev-layout">
+                                    <span>Na TV: {lay?.active ? <b>{lay.name || lay.id}</b> : lay ? <b>tela original</b> : <b>sem notícias ainda</b>}
+                                        {lay?.active && <em className={lay.status === 'verified' ? 'ok' : 'warn'}>{lay.status === 'verified' ? ' confirmado' : ' aguardando confirmação'}</em>}
+                                    </span>
+                                    {lay?.previous && <span>Anterior: {lay.previous.name || lay.previous.id}</span>}
+                                    {waiting && <span className="warn">No servidor, esperando a TV: <b>{info.pending!.name}</b></span>}
+                                </div>
+                            )}
+                            <div className="dev-actions">
+                                {info && <button className="btn primary btn-small" disabled={busy} data-testid="cloud-publish" onClick={() => { s.select(key); s.publish(key); }}>Publicar "{layoutName}"</button>}
+                                {info && <button className="btn btn-small" disabled={busy} onClick={() => s.command(key, 'rollback')} title="Volta ao último layout que funcionou (ou à tela original)">Voltar ao anterior</button>}
+                                {info && <button className="btn btn-small" disabled={busy || !lay?.active} onClick={() => s.command(key, 'reset')}>Tela original</button>}
+                                {info && <button className={'btn btn-small' + (histFor === key ? ' on' : '')} onClick={() => setHistFor(histFor === key ? null : key)}>Histórico da TV</button>}
+                                <button className="btn btn-small" disabled={busy} onClick={() => s.unpairCloud(t.deviceId)} title="Este Studio deixa de ter acesso a esta TV">Remover</button>
+                            </div>
+                            {histFor === key && info && (
+                                <div className="dev-log" data-testid="cloud-log">
+                                    {info.history.length ? info.history.map((h, i) => <div key={i}>{new Date(h.at).toLocaleString('pt-BR')} {C.describe(h)}</div>) : 'nada publicado ainda nesta TV'}
+                                </div>
+                            )}
+                        </article>
+                    );
+                })}
+            </div>
+        </>
     );
 }
 

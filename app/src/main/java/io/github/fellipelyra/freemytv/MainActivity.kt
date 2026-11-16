@@ -23,12 +23,16 @@ class MainActivity : Activity() {
 
     private lateinit var webView: WebView
     private lateinit var layouts: LayoutStore
+    private lateinit var cloud: CloudSync
     private var resumedOnce = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         layouts = LayoutStore(this)
+        cloud = CloudSync(this, layouts,
+            onLayoutChanged = { if (::webView.isInitialized) webView.reload() },
+            onInfo = { info -> if (::webView.isInitialized) webView.evaluateJavascript("window.FMTVCloud&&FMTVCloud.update($info)", null) })
         handleLayoutCommand(intent)
 
         val assetLoader = WebViewAssetLoader.Builder()
@@ -67,7 +71,7 @@ class MainActivity : Activity() {
                     Uri.parse(url).host != WebViewAssetLoader.DEFAULT_DOMAIN
             }
         }
-        webView.addJavascriptInterface(AppBridge(this, webView, layouts), "FireTV")
+        webView.addJavascriptInterface(AppBridge(this, webView, layouts, cloud), "FireTV")
         setContentView(webView)
         webView.loadUrl("https://${WebViewAssetLoader.DEFAULT_DOMAIN}/assets/web/index.html")
         webView.requestFocus()
@@ -84,6 +88,9 @@ class MainActivity : Activity() {
             ACTION_IMPORT -> layouts.importFromInbox()
             ACTION_ROLLBACK -> layouts.rollback("pedido pelo Studio")
             ACTION_RESET -> layouts.reset()
+            // Set the publishing server from the PC, without typing it with the remote:
+            //   adb shell am start -n .../.MainActivity -a ...action.SET_CLOUD_SERVER --es url https://tv.example.com
+            ACTION_SET_CLOUD -> { cloud.setServer(intent.getStringExtra("url") ?: ""); intent.action = null; return false }
             else -> return false
         }
         intent.action = null // a recreated activity must not repeat the command
@@ -98,9 +105,16 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         HomeButtonService.onLauncherShown()
+        // Layouts published over the internet arrive while the home screen is showing.
+        cloud.start()
         // Pick up apps installed while we were in the background.
         if (resumedOnce) webView.evaluateJavascript("typeof discoverTVApps==='function'&&discoverTVApps()", null)
         resumedOnce = true
+    }
+
+    override fun onPause() {
+        cloud.stop()
+        super.onPause()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -144,5 +158,6 @@ class MainActivity : Activity() {
         const val ACTION_IMPORT = "io.github.fellipelyra.freemytv.action.IMPORT_LAYOUT"
         const val ACTION_ROLLBACK = "io.github.fellipelyra.freemytv.action.ROLLBACK_LAYOUT"
         const val ACTION_RESET = "io.github.fellipelyra.freemytv.action.RESET_LAYOUT"
+        const val ACTION_SET_CLOUD = "io.github.fellipelyra.freemytv.action.SET_CLOUD_SERVER"
     }
 }

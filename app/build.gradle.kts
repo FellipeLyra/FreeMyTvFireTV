@@ -17,6 +17,13 @@ android {
         targetSdk = 34
         versionCode = (System.getenv("FMTV_VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("FMTV_VERSION_NAME") ?: "1.0.0"
+        // Default server for publishing over the internet (phase 8); empty = the person types it.
+        val cloudUrl = (System.getenv("FMTV_CLOUD_URL") ?: "").replace("\"", "")
+        buildConfigField("String", "CLOUD_URL", "\"$cloudUrl\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

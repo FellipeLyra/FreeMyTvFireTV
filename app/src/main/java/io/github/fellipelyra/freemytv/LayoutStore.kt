@@ -39,6 +39,9 @@ class LayoutStore(private val context: Context) {
     private val stateFile = File(base, "state.json")
     private val logFile = File(base, "log.txt")
 
+    /** Told about every result (import, render, rollback, reset); used by [CloudSync]. */
+    @Volatile var onReport: ((String, JSONObject) -> Unit)? = null
+
     init {
         base.mkdirs()
         currentDir.mkdirs()
@@ -319,6 +322,7 @@ class LayoutStore(private val context: Context) {
             }
         } catch (_: IOException) {
         }
+        try { onReport?.invoke(op, result) } catch (_: Exception) { }
         return result
     }
 

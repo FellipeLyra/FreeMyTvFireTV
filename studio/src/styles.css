@@ -392,3 +392,9 @@ textarea.text-field { height: auto; padding: 6px 7px; resize: vertical; line-hei
 .hist .when { color: var(--text-3); grid-row: span 2; }
 .hist.ok .what { color: var(--ok); } .hist.err .what { color: var(--danger); }
 @media (max-width: 560px) { .dev-add { flex-wrap: wrap; } .dev-add .text-field { flex-basis: 100%; } .hist { grid-template-columns: 1fr; } .hist .when { grid-row: auto; } }
+
+/* Phase 8: over the internet */
+.dev-section { margin: 6px 0 0; font-size: 12px; font-weight: 650; letter-spacing: .4px; text-transform: uppercase; color: var(--text-3); }
+.dev-section:not(:first-child) { padding-top: 10px; border-top: 1px solid var(--line); }
+.dev-add .text-field.code-field { flex: 0 0 140px; font-family: ui-monospace, Consolas, monospace; letter-spacing: 1px; }
+.dev-layout .warn { color: var(--warning); }

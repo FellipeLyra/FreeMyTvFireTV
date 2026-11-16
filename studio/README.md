@@ -2,7 +2,7 @@
 
 Editor visual para PC que cria e edita a tela inicial do Free My TV. Ele gera layouts no [formato schema v1](../docs/layouts.md), que o app do Fire TV aplica sem precisar recompilar.
 
-> **Status: Fases 3 a 7 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos, exportação, mapa de foco, alertas de acessibilidade, prévia por resolução e **publicação no Fire TV pelo ADB** já funcionam. A publicação foi testada com um Fire TV simulado; falta validar num aparelho. Publicar pela internet é a Fase 8.
+> **Status: Fases 3 a 8 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos, exportação, mapa de foco, alertas de acessibilidade, prévia por resolução, **publicação no Fire TV pelo ADB** e **publicação pela internet** ([docs/cloud.md](../docs/cloud.md)) já funcionam. As duas publicações foram testadas com Fire TVs simulados; falta validar num aparelho.
 
 ![Studio editando o layout Cinema](../docs/screenshots/studio-editor.jpg)
 
@@ -62,6 +62,7 @@ flowchart LR
 | **Projetos** | Modelos (em branco, Clássico, Cinema); abrir e salvar `.fmtvproj` (Ctrl+O, Ctrl+S, Ctrl+Shift+S); abre também um `layout.json`; **autosave** com recuperação depois de uma falha; aviso ao fechar com alterações |
 | **Exportar** | Pacote `.fmtv` para a TV (validação rigorosa, só as imagens usadas, SHA-256) ou `layout.json` |
 | **Dispositivos** | Botão **Dispositivo** na barra de cima. Lista os aparelhos que o `adb` enxerga, com nome do modelo, Fire OS, versão do Free My TV e o layout que está na TV (confirmado ou aguardando, e o anterior). **Conectar por IP** (os IPs usados ficam lembrados) e **Procurar na rede** (aparelhos com a depuração ADB ligada na rede deste PC). Explica o que fazer quando a TV ainda não autorizou o PC, está sem resposta ou não tem o Free My TV |
+| **Pela internet** | Na mesma janela: endereço do servidor Free My TV Cloud e o código que a TV mostra em Personalizar → **Parear**. A TV pareada entra na lista, com "conectada" ou "fora do ar" e quando foi vista, e recebe as mesmas ações (Publicar, Voltar ao anterior, Tela original, Histórico, Remover). Uma TV fora do ar recebe o layout quando a tela inicial abrir. O Studio só aceita servidores `https://` (ou 127.0.0.1 para testes) |
 | **Publicar** | Envia o layout para o aparelho escolhido e mostra cada passo até a **TV confirmar que desenhou**. Se o layout falhar na TV, ela volta sozinha ao anterior e o Studio mostra o motivo. **Voltar ao anterior**, **Tela original** e **Histórico da TV** (o registro que o próprio app guarda) em cada aparelho; as publicações feitas deste PC ficam listadas |
 | **Problemas** | Erros e avisos do validador na barra inferior; clicar seleciona o elemento |
 
@@ -83,6 +84,10 @@ flowchart LR
 ![Dispositivos](../docs/screenshots/studio-devices.jpg)
 
 <sub>Dispositivos, com o Fire TV simulado: o Cinema confirmado na TV, o histórico da própria TV (com uma falha que voltou sozinha ao anterior), um segundo aparelho conectado por IP e um terceiro esperando autorização.</sub>
+
+![Pela internet](../docs/screenshots/studio-cloud.jpg)
+
+<sub>Pela internet: uma TV pareada com o servidor, o Cinema confirmado e o histórico que a TV mandou ao servidor (com uma falha que voltou sozinha ao anterior).</sub>
 
 ## Publicar no Fire TV
 
@@ -122,13 +127,14 @@ npm run desktop:build    # gera o instalador em src-tauri/target/release/bundle/
 ## Testes
 
 ```
-npm test                 # 57 testes: árvore, constraints, stacks, auto layout, blocos, telas, histórico, arquivos, pacote, contraste, foco
+npm test                 # 61 testes: árvore, constraints, stacks, auto layout, blocos, telas, histórico, arquivos, pacote, contraste, foco
 npm run dev              # em outro terminal
-npm run e2e              # 73 verificações no Chrome de verdade, com mouse e teclado (as 13 de publicação
-                         # rodam quando o Studio foi aberto com npm run dev:fake-tv)
+npm run e2e              # 84 verificações no Chrome de verdade, com mouse e teclado (as 13 de publicação por ADB
+                         # rodam quando o Studio foi aberto com npm run dev:fake-tv; as 11 pela internet sobem
+                         # um servidor e uma TV simulada sozinhas)
 ```
 
-O teste ponta a ponta usa eventos reais de mouse e teclado em cinco roteiros: o modelo Cinema, o modelo Em branco com auto layout na Tela, as outras telas (Clima, Personalizar, protetor e mensagens), o mapa de foco com os alertas e a publicação no Fire TV simulado (publicar, falha com volta automática, tela original, voltar ao anterior, histórico, conectar por IP e TV sem autorização). No último, ele monta de propósito um botão escondido atrás de outro, um texto cinza-escuro de 12 px colado na borda e um texto de 17 px em 720p, e confere que cada alerta aparece e some quando deve. No modelo Cinema ele:
+O teste ponta a ponta usa eventos reais de mouse e teclado em cinco roteiros: o modelo Cinema, o modelo Em branco com auto layout na Tela, as outras telas (Clima, Personalizar, protetor e mensagens), o mapa de foco com os alertas e a publicação no Fire TV simulado (publicar, falha com volta automática, tela original, voltar ao anterior, histórico, conectar por IP e TV sem autorização), pelo ADB e pela internet (servidor sem https recusado, código errado, pareamento, publicar, falha, comandos, histórico e remover). No último, ele monta de propósito um botão escondido atrás de outro, um texto cinza-escuro de 12 px colado na borda e um texto de 17 px em 720p, e confere que cada alerta aparece e some quando deve. No modelo Cinema ele:
 - seleciona, arrasta e redimensiona;
 - desfaz e refaz;
 - reordena dentro de uma stack e tira um elemento da stack;
@@ -153,6 +159,7 @@ studio/
   src/canvas/              canvas e ponte com o iframe do runtime
   src/canvas/audit.ts      mapa de foco e alertas, lidos do runtime da TV
   src/lib/device.ts        cliente da ponte com a TV (tools/lib/bridge.mjs)
+  src/lib/cloud.ts         cliente do servidor da internet (server/fmtv-cloud.mjs)
   src/store/devices.ts     aparelhos, publicação, histórico deste PC
   src/panels/Devices.tsx   janela de dispositivos
   scripts/fake-tv.mjs      npm run dev:fake-tv

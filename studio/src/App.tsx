@@ -37,7 +37,7 @@ export function App() {
     }, []);
 
     // Look for the bridge and the TVs quietly, so the top bar can show the chosen one.
-    useEffect(() => { useDevices.getState().refresh(); }, []);
+    useEffect(() => { useDevices.getState().refresh(); useDevices.getState().refreshCloud(); }, []);
 
     // Autosave a second after the last change.
     useEffect(() => {

@@ -63,8 +63,14 @@ const MOCK = (layout) => `<script>
     resetLayout: function(){ log.calls.push(['resetLayout']); },
     listLaunchPoints: function(id){ setTimeout(function(){ window.__fmtvResolve(id, { returnValue: true,
       launchPoints: installed.map(function(p){ return { id: p, title: p }; }) }); }, 20); },
-    launch: function(id, app){ log.calls.push(['launch', app]); setTimeout(function(){ window.__fmtvResolve(id, { returnValue: true }); }, 20); }
+    launch: function(id, app){ log.calls.push(['launch', app]); setTimeout(function(){ window.__fmtvResolve(id, { returnValue: true }); }, 20); },
+    // Publishing over the internet (CloudSync.kt): answers come back later, like the real one.
+    cloudInfo: function(){ return JSON.stringify(cloud); },
+    cloudSetServer: function(url){ log.calls.push(['cloudSetServer', url]); if (url.indexOf('https://') !== 0 || url.length < 12) return 'use um endereço https://'; cloud.server = url; return ''; },
+    cloudPair: function(){ log.calls.push(['cloudPair']); setTimeout(function(){ cloud.registered = true; cloud.pairCode = 'K7QM-3XWP'; window.FMTVCloud.update(cloud); }, 30); },
+    cloudUnpair: function(){ log.calls.push(['cloudUnpair']); cloud = { server: cloud.server, registered: false, paired: false, publishers: [] }; window.FMTVCloud.update(cloud); }
   };
+  var cloud = { server: '', registered: false, paired: false, publishers: [], pairCode: null };
   function describe(el){
     if (!el) return null;
     var r = el.getBoundingClientRect();
@@ -127,6 +133,7 @@ const MOCK = (layout) => `<script>
           restore: !!sm.querySelector('#fmtvRestoreLayout'),
           justify: getComputedStyle(sm).justifyContent
         };
+        sc.settings.cloud = !!sm.querySelector('[data-fmtv-page="settings"] #fmtvCloud') && modalNavItems.indexOf(document.getElementById('fmtvCloudServer')) !== -1;
         closeSettingsModal();
         enterScreensaver();
         sc.screensaver = {
@@ -151,6 +158,30 @@ const MOCK = (layout) => `<script>
           noPageRoots: !document.querySelector('[data-fmtv-page]')
         };
       }
+      // Customize > Publish over the internet: pairing shows the code and the remote reaches the new buttons.
+      if (!document.querySelector('[data-fmtv-page]')) try {
+        openSettingsModal();
+        var box = document.getElementById('fmtvCloud');
+        var input = document.getElementById('fmtvCloudServer');
+        var c = log.cloud = { section: !!box, inPrefs: !!(box && box.parentNode.querySelector('.settings-row')), navHasInput: modalNavItems.indexOf(input) !== -1 };
+        var buttons = box ? box.querySelectorAll('button') : [];
+        c.unpairHidden = !!buttons[1] && buttons[1].style.display === 'none';
+        input.value = 'http://inseguro.example';
+        input.dispatchEvent(new Event('change'));
+        c.httpRefused = /https/.test(box.lastChild.textContent);
+        input.value = 'https://tv.example.com';
+        buttons[0].click();
+        setTimeout(function(){
+          c.code = (box.querySelector('div[style*="44px"]') || {}).textContent;
+          c.unpairShown = buttons[1].style.display === '';
+          c.navHasUnpair = modalNavItems.indexOf(buttons[1]) !== -1;
+          c.calls = log.calls.filter(function(x){ return /^cloud/.test(x[0]); }).map(function(x){ return x.join(' '); });
+          closeSettingsModal();
+          var pre = document.createElement('pre'); pre.id = 'fmtvTestResult'; pre.style.display = 'none';
+          pre.textContent = JSON.stringify(log); document.body.appendChild(pre);
+        }, 200);
+        return;
+      } catch (e) { log.errors.push('teste da nuvem: ' + e.message); }
       // Put focus back where the screenshot expects it.
       var pre = document.createElement('pre'); pre.id = 'fmtvTestResult'; pre.style.display = 'none';
       pre.textContent = JSON.stringify(log); document.body.appendChild(pre);
@@ -238,6 +269,13 @@ for (const name of Object.keys(SCENARIOS).filter((n) => !process.env.FMTV_ONLY |
         check('prateleira com apps', log.dom.tiles > 0, String(log.dom.tiles));
     }
     if (name === 'none') check('nada reportado ao app', !calls.includes('layoutRendered') && !calls.includes('layoutFailed'));
+    if (name === 'none') {
+        const c = log.cloud || {};
+        check('Personalizar: seção "Publicar pela internet" dentro das preferências, navegável', c.section && c.inPrefs && c.navHasInput, JSON.stringify(c));
+        check('endereço sem https é recusado', c.httpRefused, JSON.stringify(c));
+        check('parear salva o servidor e mostra o código na tela', c.code === 'K7QM-3XWP' && (c.calls || []).join('|') === 'cloudSetServer http://inseguro.example|cloudSetServer https://tv.example.com|cloudPair', JSON.stringify(c));
+        check('"Desparear" aparece e entra na navegação do controle', c.unpairHidden && c.unpairShown && c.navHasUnpair, JSON.stringify(c));
+    }
     if (name === 'invalid') {
         const failed = log.calls.find((c) => c[0] === 'layoutFailed');
         check('falha reportada ao app (para rollback)', !!failed && failed[1] === 'broken');
@@ -282,6 +320,7 @@ for (const name of Object.keys(SCENARIOS).filter((n) => !process.env.FMTV_ONLY |
         check('Personalizar: preferências antes dos apps (ordem do layout)', sc.settings && JSON.stringify(sc.settings.order) === '["s-header","s-prefs","s-apps","s-actions"]', JSON.stringify(sc.settings));
         check('Personalizar: navegação só por itens da janela, com Salvar e "Layout padrão"', sc.settings && sc.settings.navItems > 5 && sc.settings.navInside && sc.settings.save && sc.settings.restore, JSON.stringify(sc.settings));
         check('Personalizar: janela à direita', sc.settings && sc.settings.justify === 'flex-end', sc.settings && sc.settings.justify);
+        check('Personalizar reorganizado: a seção de publicação vai junto com as preferências', sc.settings && sc.settings.cloud, JSON.stringify(sc.settings));
         check('protetor: relógio 180 px sem data', sc.screensaver && sc.screensaver.root && sc.screensaver.clockSize === '180px' && sc.screensaver.dateHidden, JSON.stringify(sc.screensaver));
         check('mensagens: embaixo, com o estilo do layout', sc.messages && sc.messages.text === 'Abrindo Netflix…' && sc.messages.bottomGap === 40 && sc.messages.fontSize === '22px', JSON.stringify(sc.messages));
         check('sem o layout, todas as telas voltam ao original', sc.restored && sc.restored.current && sc.restored.actions && sc.restored.clockSize === '132px' && sc.restored.toastTop === '24px' && sc.restored.noPageRoots, JSON.stringify(sc.restored));
