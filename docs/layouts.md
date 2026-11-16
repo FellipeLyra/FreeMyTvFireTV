@@ -86,11 +86,13 @@ Dentro de uma stack, um filho com `"position": "absolute"` sai do fluxo e é pos
 
 | `anchor` | Campos | Resultado |
 |---|---|---|
-| `start` | `offset`, `size` | Distância da esquerda (ou do topo) e tamanho fixo |
-| `end` | `offset`, `size` | Distância da direita (ou de baixo) e tamanho fixo |
-| `center` | `offset`, `size` | Centralizado, deslocado por `offset` |
+| `start` | `offset`, `size`? | Distância da esquerda (ou do topo) e tamanho fixo |
+| `end` | `offset`, `size`? | Distância da direita (ou de baixo) e tamanho fixo |
+| `center` | `offset`, `size`? | Centralizado, deslocado por `offset` |
 | `stretch` | `start`, `end` | Estica, mantendo as duas distâncias |
 | `scale` | `start`, `size` | Em percentual do container |
+
+Em `start`, `end` e `center`, o `size` é opcional: sem ele, o elemento **abraça o conteúdo** naquele eixo (o "Hug" do Studio). No Studio, **Fill** vira `stretch` e **percentual** vira `scale`.
 
 ### Componentes disponíveis
 

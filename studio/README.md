@@ -43,8 +43,8 @@ flowchart LR
 |---|---|
 | **Canvas** | Tela 1920×1080; zoom com Ctrl+roda ou pelos botões; mover a vista com espaço+arrastar ou o botão do meio; "ajustar à tela"; área segura da TV (90%); medidas do elemento selecionado |
 | **Seleção** | Clique; Shift+clique para seleção múltipla; Esc limpa; caminho do elemento na barra inferior |
-| **Posição absoluta** | Arrastar com **guias inteligentes** (bordas e centros do container e dos irmãos) ou grade de 8 px (Alt solta livre); setas movem 1 px, Shift+setas 10 px; **8 alças** de redimensionar (Shift mantém a proporção); X/Y/L/A numéricos; **constraints** (esquerda, direita, centro, esticar, escala) que mudam sem mover o elemento |
-| **Auto layout** (no estilo do Figma) | Direção vertical, horizontal ou com quebra de linha; **grade 3×3 de alinhamento**; espaçamento com opção **Auto** (espaço entre); padding por eixo ou por lado; esticar filhos; linha de base; cortar conteúdo; **adicionar e remover auto layout** (Shift+A) mantendo o visual, com direção, espaçamento e padding deduzidos das posições e o que estava esticado virando **Fill**; filhos com **Fixo / Hug / Fill** ou percentual e mín./máx.; **"Ignorar auto layout"**; arrastar reordena com **indicador de inserção**; stacks vazias aparecem com contorno tracejado |
+| **Posição absoluta** | Arrastar com **guias inteligentes** (bordas e centros do container e dos irmãos) ou grade de 8 px (Alt solta livre); setas movem 1 px, Shift+setas 10 px; **8 alças** de redimensionar (Shift mantém a proporção); X/Y/L/A numéricos; largura e altura **Fixo / Hug / Fill / percentual** sem mover o elemento; **constraints** (esquerda, direita, centro, esticar, escala) que mudam sem mover o elemento |
+| **Auto layout** (no estilo do Figma) | Direção vertical, horizontal ou com quebra de linha; **grade 3×3 de alinhamento**; espaçamento com opção **Auto** (espaço entre); padding por eixo ou por lado; esticar filhos; linha de base; cortar conteúdo; **adicionar e remover auto layout** (Shift+A) mantendo o visual, com direção, espaçamento e padding deduzidos das posições e o que estava esticado virando **Fill**; filhos com **Fixo / Hug / Fill** ou percentual e mín./máx. (a seção **Redimensionamento** aparece logo abaixo do nome, antes do auto layout); stacks criadas a partir da seleção começam em **Hug**; **"Ignorar auto layout"**; arrastar reordena com **indicador de inserção**; stacks vazias aparecem com contorno tracejado |
 | **Entre modos** | Levar um elemento de uma stack para um container absoluto (ou o contrário) mantendo o lugar; "No fluxo"/"Absoluto" dentro de stacks; o Studio avisa quando a mudança de modo altera algo |
 | **Organizar** | Duplicar, copiar, recortar, colar, excluir, criar stack a partir da seleção (Ctrl+G / Ctrl+Alt+G), desagrupar (Ctrl+Shift+G), trazer para frente ou enviar para trás, alinhar e distribuir, ocultar, bloquear; menu de contexto |
 | **Camadas** | Árvore com busca, expandir e recolher, renomear (duplo clique), ocultar, bloquear e arrastar para reordenar ou trocar de container |
@@ -93,12 +93,12 @@ npm run desktop:build    # gera o instalador em src-tauri/target/release/bundle/
 ## Testes
 
 ```
-npm test                 # 39 testes: árvore, constraints, stacks, auto layout, blocos, telas, histórico, arquivos, pacote
+npm test                 # 42 testes: árvore, constraints, stacks, auto layout, blocos, telas, histórico, arquivos, pacote
 npm run dev              # em outro terminal
 npm run e2e              # 47 verificações no Chrome de verdade, com mouse e teclado
 ```
 
-O teste ponta a ponta abre o Studio no modelo Cinema e, com eventos reais de mouse e teclado:
+O teste ponta a ponta usa eventos reais de mouse e teclado em três roteiros: o modelo Cinema, o modelo Em branco com auto layout na Tela e as outras telas (Clima, Personalizar, protetor e mensagens). No modelo Cinema ele:
 - seleciona, arrasta e redimensiona;
 - desfaz e refaz;
 - reordena dentro de uma stack e tira um elemento da stack;
@@ -132,6 +132,5 @@ studio/
 
 ## Limitações desta fase
 
-- **Auto layout no container:** um container com auto layout que está solto na tela (absoluto) tem tamanho fixo. O "Hug" do próprio container ainda não existe, só o dos filhos.
 - **Publicar** e **Dispositivo** ficam desativados até as Fases 7 (ADB) e 8 (internet). Use **Exportar → Pacote (.fmtv)** e a CLI.
 - O teste ponta a ponta roda no Chrome; o app desktop usa o WebView2, que é do mesmo motor, mas não tem teste automático próprio.

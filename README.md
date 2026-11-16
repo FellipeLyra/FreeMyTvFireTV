@@ -17,7 +17,7 @@ Seus apps de streaming numa prateleira de vidro, clima ao vivo que acompanha o p
 Este projeto adapta para o Fire TV o [**Free My TV for LG webOS**](https://github.com/danielthejoker18/FreeMyTvWebOS), de Daniel (licença MIT). A interface é a mesma do original. O que muda é a camada que conversa com o aparelho: no LG ela usa os serviços do webOS e aqui usa o Android, que é a base do Fire OS.
 
 > **Status:** em desenvolvimento.
-> - O APK compila e os testes automáticos passam: 19 testes do motor de layout e os cenários do runtime no Chrome headless.
+> - O APK compila e os testes automáticos passam: 25 testes do motor de layout e da CLI, os cenários do runtime no Chrome headless e, no Studio, 42 testes unitários e 47 verificações ponta a ponta no Chrome.
 > - Nada foi testado num Fire TV de verdade ainda. As telas abaixo vêm da interface rodando no Chrome, com uma simulação dos apps instalados.
 > - Se algo não funcionar no seu aparelho, abra uma *issue* dizendo o modelo e a versão do Fire OS.
 
@@ -176,7 +176,8 @@ Editor para PC, em [`studio/`](studio/), no estilo das ferramentas de design de 
 ![Free My TV Studio](docs/screenshots/studio-editor.jpg)
 
 O que já funciona:
-- **auto layout no estilo do Figma** (grade de alinhamento, espaçamento Auto, Fixo/Hug/Fill, Shift+A) e **posicionamento absoluto** com constraints;
+- **auto layout no estilo do Figma** (grade de alinhamento, espaçamento Auto, Shift+A) e **posicionamento absoluto** com constraints;
+- **Fixo / Hug / Fill / percentual em todo elemento**, dentro de stacks ou solto na tela, sem mover nada; stacks criadas a partir de uma seleção já abraçam o conteúdo (Hug);
 - blocos de conteúdo com dados reais: **carrossel e grade** de filmes, séries ou apps, **banner de destaque**, **clima completo** e **ícones**, mais blocos prontos e blocos salvos pelo usuário;
 - arrastar com guias inteligentes, alças de redimensionar e reordenação por drag and drop;
 - painel de camadas, biblioteca de componentes, assets e propriedades;
@@ -348,7 +349,7 @@ Cada mudança do script precisa encontrar exatamente o trecho esperado. Se o pro
 ### Testes
 
 ```
-node --test tools/test/          # motor de layout e formato do pacote (19 testes)
+node --test tools/test/          # motor de layout e formato do pacote (25 testes)
 node tools/browser-test.mjs      # runtime no Chrome headless (precisa do Chrome ou Edge)
 ```
 
@@ -371,7 +372,7 @@ O objetivo é um editor visual para PC (no estilo de ferramentas de design de in
 |---|---|---|
 | 1. Auditoria e arquitetura | Mapear telas e widgets; schema v1; contratos entre editor, TV e publicação | ✅ Feito ([docs/layouts.md](docs/layouts.md)) |
 | 2. Runtime e vertical slice | Motor compartilhado, runtime na TV, stacks e posicionamento absoluto, importação segura, rollback, CLI e ADB | ✅ Feito. APK compila e os testes automáticos passam; **falta validar num Fire TV** |
-| 3. Studio desktop | App de PC (Tauri + React + TypeScript): canvas 1920×1080, camadas, propriedades, drag and drop, desfazer/refazer, salvar projeto | ✅ Feito ([studio/](studio/)). 26 testes unitários + 16 verificações ponta a ponta no Chrome |
+| 3. Studio desktop | App de PC (Tauri + React + TypeScript): canvas 1920×1080, camadas, propriedades, drag and drop, desfazer/refazer, salvar projeto | ✅ Feito ([studio/](studio/)). Hoje: 42 testes unitários + 47 verificações ponta a ponta no Chrome |
 | 4. Biblioteca de blocos | Carrossel, grade, banner, clima completo, ícones, blocos prontos e blocos do usuário; auto layout no estilo do Figma | ✅ Feito. Os blocos usam os serviços do launcher (TMDB/TVMaze, Open-Meteo, apps do Android) |
 | 5. Todas as telas | Clima, Personalizar, protetor de tela e mensagens no runtime e no Studio | ✅ Feito. As funções seguem as do launcher, as partes obrigatórias são protegidas e tudo volta ao original sem o layout. Detalhes, confirmações e carregamento não existem no launcher e não foram inventados |
 | 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime e simulador de controle remoto com a mesma navegação | 🟡 Próxima. Base pronta: a Prévia e o controle virtual já existem; faltam ordem de foco visual, alertas de acessibilidade e resoluções 720p/4K |
