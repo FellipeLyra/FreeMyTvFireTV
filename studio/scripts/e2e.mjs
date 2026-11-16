@@ -340,6 +340,79 @@ try {
     await sleep(700);
     check('voltar à tela inicial fecha as outras telas', await frameEval(`return !w.drawerOpen && !w.modalOpen && !w.screensaverOn && d.getElementById('toastMsg').style.display !== 'block';`));
     check('documento com todas as telas continua válido', (await evaluate(`${S}.validation.errors.length`)) === 0, JSON.stringify(await evaluate(`${S}.validation.errors`)));
+
+    // Phase 6: focus map, accessibility alerts, TV resolution
+    console.log('\n[Studio e2e: mapa de foco, acessibilidade e resolução]');
+    await evaluate(`${S}.load(${S}.project, 'x'); __fmtvStudio.setState({ dirty: false })`);
+    await send('Page.navigate', { url: `${BASE}/?template=blank` });
+    await waitFor(`window.__fmtvStudio && ${S}.project.layout.name === 'Novo layout' && !!${S}.rects['apps'] && !!${S}.rects['customize']`);
+    await waitFor(`${S}.audit.focus && ${S}.audit.focus.items.length > 3`);
+    check('modelo Em branco sem alertas de acessibilidade', (await evaluate(`${S}.audit.issues.length`)) === 0, JSON.stringify(await evaluate(`${S}.audit.issues`)));
+    await evaluate(`document.activeElement && document.activeElement.blur()`);
+    await key('f', 'KeyF', 0, 70);
+    await sleep(400);
+    const fm = await evaluate(`({ on: ${S}.showFocusMap, boxes: document.querySelectorAll('.fm-item').length, items: ${S}.audit.focus.items.length,
+        start: (document.querySelector('.fm-item.start .fm-badge') || {}).textContent, legend: !!document.querySelector('[data-testid=focus-legend]') })`);
+    check('tecla F mostra o mapa de foco com um quadro por item navegável', fm.on && fm.boxes === fm.items && fm.boxes > 3 && fm.legend, JSON.stringify(fm));
+    const startTile = await evaluate(`(() => { const f = ${S}.audit.focus; const d = document.querySelector('iframe').contentDocument; const el = Array.from(d.querySelectorAll('.nav-item')).filter(e => e.offsetParent !== null)[f.start]; return el && el.classList.contains('app-tile'); })()`);
+    check('o foco inicial é o primeiro app da prateleira, como na TV', fm.start === 'início' && startTile === true);
+    // Hover an app tile: the arrows from it are drawn.
+    const tileR = await evaluate(`(() => { const f = ${S}.audit.focus; return f.items[f.start + 1].rect; })()`);
+    const tileP = await screen(tileR.x + tileR.w / 2, tileR.y + tileR.h / 2);
+    await mouse('mouseMoved', tileP.x, tileP.y, 0);
+    await sleep(300);
+    const arrows = await evaluate(`({ lines: document.querySelectorAll('.fm-arrows line').length, tip: (document.querySelector('.fm-tip') || {}).textContent || '' })`);
+    check('passar o mouse num item mostra para onde cada seta leva', arrows.lines >= 2 && /clique/.test(arrows.tip), JSON.stringify(arrows));
+
+    const hiddenId = await evaluate(`(() => { const r = ${S}.rects['customize']; return ${S}.addNode('button', { parentId: 'root', index: 99, rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) } }); })()`);
+    // Two buttons on the same spot: the TV's pickNext always lands on the same one, the other never gets focus.
+    const pair = JSON.stringify([hiddenId, 'customize']);
+    await waitFor(`${S}.audit.issues.some(i => i.rule === 'unreachable' && ${pair}.includes(i.nodeId))`, 6000).catch(() => {});
+    check('botão em cima de outro: um deles fica "inalcançável", com quadro vermelho',
+        (await evaluate(`${S}.audit.issues.filter(i => i.rule === 'unreachable' && ${pair}.includes(i.nodeId)).length`)) === 1 && (await evaluate(`document.querySelectorAll('.fm-item.lost').length`)) === 1,
+        JSON.stringify(await evaluate(`${S}.audit.issues`)));
+    await key('z', 'KeyZ', 2, 90);
+    await waitFor(`!${S}.audit.issues.some(i => i.rule === 'unreachable')`, 6000).catch(() => {});
+    check('desfazer remove o alerta', !(await evaluate(`${S}.audit.issues.some(i => i.rule === 'unreachable')`)));
+
+    // Dark grey, small text glued to the left edge.
+    const textId = await evaluate(`${S}.addNode('text', { parentId: 'root', index: 99, rect: { x: 20, y: 460, w: 420, h: 40 } })`);
+    await evaluate(`${S}.updateNode(${JSON.stringify(textId)}, n => { n.props = { text: 'Texto difícil de ler' }; n.text = { size: 12, color: '#333333' }; })`);
+    await waitFor(`${S}.audit.issues.filter(i => i.nodeId === ${JSON.stringify(textId)}).length >= 3`, 6000).catch(() => {});
+    const rules = await evaluate(`${S}.audit.issues.filter(i => i.nodeId === ${JSON.stringify(textId)}).map(i => i.rule).sort().join(',')`);
+    check('texto cinza-escuro, 12 px, na borda: contraste, tamanho e área segura', rules === 'contrast,safe-area,text-size', rules);
+    const cmsg = await evaluate(`(${S}.audit.issues.find(i => i.rule === 'contrast') || {}).message || ''`);
+    check('alerta de contraste diz a razão e as cores', /Contraste de 1,\d:1/.test(cmsg) && /#333333/.test(cmsg) && /4,5:1/.test(cmsg), cmsg);
+
+    // 17 px, light, inside the safe area: fine in 1080p, blurry in 720p.
+    await evaluate(`${S}.updateNode(${JSON.stringify(textId)}, n => { n.text = { size: 17, color: '#f5f5f7' }; n.constraints.h.offset = 200; })`);
+    await waitFor(`${S}.audit.issues.length === 0`, 6000).catch(() => {});
+    check('texto claro de 17 px dentro da área segura: sem alertas em 1080p', (await evaluate(`${S}.audit.issues.length`)) === 0, JSON.stringify(await evaluate(`${S}.audit.issues`)));
+    await evaluate(`${S}.setTvRes('720p')`);
+    await waitFor(`${S}.audit.issues.some(i => i.rule === 'resolution')`, 6000).catch(() => {});
+    const r720 = await evaluate(`${S}.audit.issues.filter(i => i.rule === 'resolution').map(i => i.message)`);
+    check('em 720p o mesmo texto vira 11,3 px reais e é avisado', r720.some((m) => /720p/.test(m) && /11,3 px reais/.test(m)), JSON.stringify(r720));
+    const status = await evaluate(`document.querySelector('[data-testid=a11y-status]').textContent`);
+    check('barra de baixo conta os alertas de acessibilidade', /alerta\(s\) de acessibilidade/.test(status), status);
+
+    const one = await evaluate(`(() => { const r = document.querySelector('[data-testid=actual-size]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await mouse('mouseMoved', one.x, one.y, 0); await mouse('mousePressed', one.x, one.y); await mouse('mouseReleased', one.x, one.y, 0);
+    await sleep(300);
+    const zr = await evaluate(`${S}.zoom`);
+    check('"1:1" em 720p: 1 pixel da TV = 1 pixel da tela', Math.abs(zr - 1280 / 1920) < 0.01, String(zr));
+
+    // Clicking an alert selects its element.
+    await evaluate(`${S}.select([])`);
+    const st = await evaluate(`(() => { const r = document.querySelector('[data-testid=a11y-status]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await mouse('mouseMoved', st.x, st.y, 0); await mouse('mousePressed', st.x, st.y); await mouse('mouseReleased', st.x, st.y, 0);
+    await sleep(300);
+    const pr = await evaluate(`(() => { const b = Array.from(document.querySelectorAll('.problem.a11y')).find(e => /720p/.test(e.textContent)); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; })()`);
+    if (pr) { await mouse('mouseMoved', pr.x, pr.y, 0); await mouse('mousePressed', pr.x, pr.y); await mouse('mouseReleased', pr.x, pr.y, 0); await sleep(300); }
+    check('clicar no alerta seleciona o elemento', JSON.stringify(await evaluate(`${S}.selection`)) === JSON.stringify([textId]), JSON.stringify(await evaluate(`${S}.selection`)));
+    if (SHOT) {
+        const shotF = await send('Page.captureScreenshot', { format: 'png' });
+        writeFileSync(SHOT.replace(/\.png$/, '-focus.png'), Buffer.from(shotF.data, 'base64'));
+    }
 } catch (e) {
     check('execução', false, e.stack || String(e));
 } finally {

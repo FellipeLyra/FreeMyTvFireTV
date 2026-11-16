@@ -6,6 +6,7 @@ import { ContextMenu, type MenuItem } from './ui/ContextMenu';
 import { TEMPLATES } from './model/project';
 import { openProject, saveProject, download, clearAutosave } from './lib/storage';
 import { buildPackage, finalizeLayout } from './lib/pack';
+import { TV_RES, type TvRes } from './model/a11y';
 
 export async function doSave(saveAs = false) {
     const s = useEditor.getState();
@@ -44,6 +45,8 @@ export function TopBar() {
     const customPages = useEditor((s) => Object.keys(s.project.layout.pages));
     const showSafeArea = useEditor((s) => s.showSafeArea);
     const snap = useEditor((s) => s.snap);
+    const showFocusMap = useEditor((s) => s.showFocusMap);
+    const tvRes = useEditor((s) => s.tvRes);
     const s = useEditor.getState();
     const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
 
@@ -105,6 +108,17 @@ export function TopBar() {
                 <button className="tb-icon" title="Aumentar zoom (Ctrl+=)" onClick={() => s.setZoom(zoom * 1.25)}><I.Plus /></button>
                 <button className={'tb-icon' + (showSafeArea ? ' on' : '')} title="Área segura da TV" onClick={() => s.toggle('showSafeArea')}><I.Safe /></button>
                 <button className={'tb-icon' + (snap ? ' on' : '')} title="Grade e guias inteligentes (segure Alt para soltar livre)" onClick={() => s.toggle('snap')}><I.Grid /></button>
+                <button className={'tb-icon' + (showFocusMap ? ' on' : '')} data-testid="focus-map-btn"
+                    title="Mapa de foco (F): por onde o controle remoto passa, quantos cliques até cada item e o que as setas não alcançam"
+                    onClick={() => s.toggle('showFocusMap')}><I.Focus /></button>
+                <select className="select-field res-select" value={tvRes} aria-label="Resolução da TV" data-testid="res-select"
+                    title="Resolução da TV. O layout tem sempre 1920×1080 e a TV só muda a escala: em 720p tudo fica com 2/3 dos pixels (texto pequeno e linhas finas perdem nitidez); em 4K, o dobro."
+                    onChange={(e) => s.setTvRes(e.target.value as TvRes)}>
+                    {Object.entries(TV_RES).map(([id, r]) => <option key={id} value={id} title={r.label}>TV {r.label.split(' ')[0]}</option>)}
+                </select>
+                <button className="tb-btn tb-small" data-testid="actual-size"
+                    title="Tamanho real: 1 pixel da TV nesta resolução = 1 pixel da sua tela (Shift+0)"
+                    onClick={() => window.dispatchEvent(new Event('fmtv:actual-size'))}>1:1</button>
                 <span className="tb-sep" />
                 <button className="tb-icon" title="Stack horizontal: agrupa os elementos selecionados (Ctrl+G) ou cria uma vazia" onClick={() => s.createStack('horizontal')}><I.StackH /></button>
                 <button className="tb-icon" title="Stack vertical: agrupa os elementos selecionados (Ctrl+Alt+G) ou cria uma vazia" onClick={() => s.createStack('vertical')}><I.StackV /></button>

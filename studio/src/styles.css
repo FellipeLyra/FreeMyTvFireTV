@@ -218,7 +218,7 @@ textarea.text-field { height: auto; padding: 6px 7px; resize: vertical; line-hei
 .ov-empty { display: grid; place-items: center; border: dashed rgba(127,176,255,.55); background: rgba(61,139,255,.05); color: #9cc2ff; font-size: 12px; overflow: hidden; }
 .ov-empty span { white-space: nowrap; transform-origin: center; }
 .ov-size { padding: 2px 6px; border-radius: 4px; background: var(--select); color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.safe-area { left: 96px; top: 54px; width: 1728px; height: 972px; border: dashed rgba(255,255,255,.18); }
+.safe-area { border: dashed rgba(255,255,255,.18); }
 .canvas-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-3); }
 
 .remote { position: absolute; right: 16px; bottom: 16px; width: 168px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: rgba(27,28,33,.94); box-shadow: 0 10px 30px rgba(0,0,0,.45); }
@@ -313,3 +313,30 @@ textarea.text-field { height: auto; padding: 6px 7px; resize: vertical; line-hei
 .page-original strong { display: block; margin-bottom: 2px; }
 .page-original span { color: var(--text-2); font-size: 12px; }
 .page-original .btn { flex: none; }
+
+/* Phase 6: focus map, accessibility, TV resolution */
+.res-select { width: 100px; height: 26px; }
+.tb-btn.tb-small { padding: 0 8px; font-variant-numeric: tabular-nums; }
+.fm-item { border: solid rgba(64, 156, 255, .85); border-radius: 6px; background: rgba(64, 156, 255, .08); }
+.fm-item.start { border-color: #34c759; background: rgba(52, 199, 89, .12); }
+.fm-item.lost { border-color: #ff453a; border-style: dashed; background: rgba(255, 69, 58, .14); }
+.fm-item.hover { background: rgba(255, 255, 255, .14); }
+.fm-badge { position: absolute; left: -4px; top: -4px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; transform-origin: top left;
+    display: inline-flex; align-items: center; justify-content: center; background: #409cff; color: #fff; font-size: 12px; font-weight: 700;
+    box-shadow: 0 1px 4px rgba(0,0,0,.5); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fm-item.start .fm-badge { background: #34c759; }
+.fm-item.lost .fm-badge { background: #ff453a; }
+.canvas-overlay > svg.fm-arrows { left: 0; top: 0; overflow: visible; color: #ffd60a; }
+.fm-arrows line { stroke: currentColor; }
+.fm-arrows text { fill: #111; paint-order: stroke; stroke: currentColor; stroke-width: 6px; font-weight: 700; }
+.fm-tip { display: flex; flex-direction: column; gap: 2px; max-width: 520px; padding: 6px 9px; border-radius: 6px; background: rgba(17,18,22,.95);
+    border: 1px solid var(--line-strong); color: var(--text); font-size: 12px; white-space: nowrap; }
+.fm-tip span { color: var(--text-2); }
+.fm-legend { position: absolute; left: 16px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 6px 14px; max-width: calc(100% - 220px); padding: 8px 12px;
+    border: 1px solid var(--line-strong); border-radius: 10px; background: rgba(27,28,33,.94); color: var(--text-2); font-size: 12px; }
+.fm-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.fm-legend .fm-sum { color: var(--text); }
+.fm-legend .dot { width: 10px; height: 10px; border-radius: 50%; background: #409cff; display: inline-block; }
+.fm-legend .dot.start { background: #34c759; } .fm-legend .dot.lost { background: #ff453a; }
+.status-btn.a11y { color: #64d2ff; }
+.problem.a11y svg { color: #64d2ff; }

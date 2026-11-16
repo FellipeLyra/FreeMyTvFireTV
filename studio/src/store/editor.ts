@@ -11,6 +11,8 @@ import * as T from '../model/tree';
 import { newProject } from '../model/project';
 import type { Block } from '../model/blocks';
 import { defaultPage } from '../model/pages';
+import type { TvRes } from '../model/a11y';
+import type { Audit } from '../canvas/audit';
 
 const HISTORY_LIMIT = 200;
 const COALESCE_MS = 700;
@@ -44,6 +46,10 @@ export interface EditorState {
     leftTab: LeftTab;
     showSafeArea: boolean;
     snap: boolean;
+    /** Phase 6: focus map overlay, TV resolution being checked, and what the audit found. */
+    showFocusMap: boolean;
+    tvRes: TvRes;
+    audit: Audit;
     clipboard: LayoutNode[] | null;
     validation: ValidationResult;
     toasts: Toast[];
@@ -68,7 +74,9 @@ export interface EditorState {
     customizePage(page: string): void;
     resetPage(page: string): void;
     updatePanel(fn: (panel: { placement?: string; width?: number; height?: number }) => void, key?: string): void;
-    toggle(key: 'showSafeArea' | 'snap'): void;
+    toggle(key: 'showSafeArea' | 'snap' | 'showFocusMap'): void;
+    setTvRes(res: TvRes): void;
+    setAudit(audit: Audit): void;
     toast(text: string, kind?: Toast['kind']): void;
     dismissToast(id: number): void;
     setRenderErrors(errors: string[]): void;
@@ -171,6 +179,9 @@ export const useEditor = create<EditorState>((set, get) => {
         leftTab: 'layers',
         showSafeArea: true,
         snap: true,
+        showFocusMap: false,
+        tvRes: '1080p',
+        audit: { focus: null, issues: [] },
         clipboard: null,
         validation: validate(initial),
         toasts: [],
@@ -212,7 +223,7 @@ export const useEditor = create<EditorState>((set, get) => {
         load(project, fileName, handle = null) {
             set({
                 project, past: [], future: [], dirty: false, fileName, fileHandle: handle, selection: [], hover: null,
-                rects: {}, coalesce: null, validation: validate(project), page: 'home', mode: 'edit',
+                rects: {}, coalesce: null, validation: validate(project), page: 'home', mode: 'edit', audit: { focus: null, issues: [] },
             });
         },
         markSaved(fileName, handle) {
@@ -228,7 +239,7 @@ export const useEditor = create<EditorState>((set, get) => {
         setLeftTab(leftTab) { set({ leftTab }); },
         setPage(page) {
             if (!E.PAGES[page] || page === get().page) return;
-            set({ page, selection: [], hover: null, rects: {}, mode: 'edit' });
+            set({ page, selection: [], hover: null, rects: {}, mode: 'edit', audit: { focus: null, issues: [] } });
         },
         customizePage(page) {
             const def = defaultPage(page);
@@ -255,6 +266,8 @@ export const useEditor = create<EditorState>((set, get) => {
             }, key ? 'panel.' + key : undefined);
         },
         toggle(key) { set({ [key]: !get()[key] } as Partial<EditorState>); },
+        setTvRes(tvRes) { set({ tvRes }); },
+        setAudit(audit) { set({ audit }); },
         toast(text, kind = 'info') {
             const id = ++toastSeq;
             set({ toasts: [...get().toasts, { id, text, kind }].slice(-4) });

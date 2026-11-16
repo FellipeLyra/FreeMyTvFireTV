@@ -7,6 +7,8 @@ import { PreviewFrame, STAGE_H, STAGE_W } from './preview';
 import { ContextMenu, type MenuItem } from '../ui/ContextMenu';
 import { BUILTIN_BLOCKS, type Block } from '../model/blocks';
 import { PAGE_HINTS } from '../model/pages';
+import { runAudit, type FocusMap } from './audit';
+import { DIRS, TV_RES, SAFE } from '../model/a11y';
 
 export let preview: PreviewFrame | null = null;
 
@@ -42,7 +44,11 @@ export function Canvas() {
     const pan = useEditor((s) => s.pan);
     const mode = useEditor((s) => s.mode);
     const showSafeArea = useEditor((s) => s.showSafeArea);
+    const showFocusMap = useEditor((s) => s.showFocusMap);
+    const focusMap = useEditor((s) => s.audit.focus);
+    const tvRes = useEditor((s) => s.tvRes);
     const root = useEditor(selectRoot);
+    const [focusHover, setFocusHover] = useState(-1);
 
     const viewportRef = useRef<HTMLDivElement>(null);
     const stageRef = useRef<HTMLDivElement>(null);
@@ -58,9 +64,18 @@ export function Canvas() {
 
     const measure = useCallback(() => {
         if (!preview?.ready) return;
-        const next = preview.measure(useEditor.getState().page);
-        const cur = useEditor.getState().rects;
-        if (JSON.stringify(next) !== JSON.stringify(cur)) useEditor.getState().setRects(next);
+        const st = useEditor.getState();
+        const next = preview.measure(st.page);
+        if (JSON.stringify(next) !== JSON.stringify(st.rects)) st.setRects(next);
+        // Focus map and accessibility alerts come from the same runtime the TV runs.
+        // While previewing, focus effects move things around: keep the edit-time result.
+        if (st.mode !== 'edit') return;
+        try {
+            const audit = runAudit(preview, st.page, selectRoot(st), st.tvRes);
+            if (JSON.stringify(audit) !== JSON.stringify(st.audit)) st.setAudit(audit);
+        } catch (e) {
+            if (import.meta.env.DEV) console.warn('[audit]', e);
+        }
     }, []);
 
     useEffect(() => {
@@ -130,6 +145,8 @@ export function Canvas() {
         if (mode === 'edit') preview?.releaseFocus();
     }, [mode, ready]);
 
+    useEffect(() => { measure(); }, [tvRes, measure]);
+
     useEffect(() => {
         if (!ready) return;
         const t = setInterval(measure, 800);
@@ -145,13 +162,27 @@ export function Canvas() {
         useEditor.getState().setZoom(z, { x: (vp.clientWidth - STAGE_W * z) / 2, y: (vp.clientHeight - STAGE_H * z) / 2 });
     }, []);
 
+    /** "Actual size": one real pixel of the chosen TV per pixel of this screen, centred. */
+    const actualSize = useCallback(() => {
+        const vp = viewportRef.current;
+        if (!vp) return;
+        const res = TV_RES[useEditor.getState().tvRes];
+        const z = res.w / STAGE_W / (window.devicePixelRatio || 1);
+        useEditor.getState().setZoom(z, { x: (vp.clientWidth - STAGE_W * z) / 2, y: (vp.clientHeight - STAGE_H * z) / 2 });
+    }, []);
+
     useLayoutEffect(() => { fit(); }, [fit]);
     useEffect(() => {
         const onFit = () => fit();
         window.addEventListener('fmtv:fit', onFit);
+        window.addEventListener('fmtv:actual-size', actualSize);
         window.addEventListener('resize', onFit);
-        return () => { window.removeEventListener('fmtv:fit', onFit); window.removeEventListener('resize', onFit); };
-    }, [fit]);
+        return () => {
+            window.removeEventListener('fmtv:fit', onFit);
+            window.removeEventListener('fmtv:actual-size', actualSize);
+            window.removeEventListener('resize', onFit);
+        };
+    }, [fit, actualSize]);
 
     useEffect(() => {
         const vp = viewportRef.current!;
@@ -285,6 +316,7 @@ export function Canvas() {
         if (!d) {
             const { x, y } = toStage(e);
             s.setHover(nodeAt(x, y)?.id || null);
+            if (s.showFocusMap && s.audit.focus) setFocusHover(focusItemAt(s.audit.focus.items.map((i) => i.rect), x, y));
             return;
         }
         if (d.kind === 'pan') {
@@ -467,7 +499,8 @@ export function Canvas() {
                         onPointerLeave={() => !drag.current && useEditor.getState().setHover(null)} onContextMenu={onContextMenu}
                         onDragStart={(e) => e.preventDefault()} onPointerCancel={() => { drag.current = null; redraw(); }}
                         onDoubleClick={() => window.dispatchEvent(new CustomEvent('fmtv:focus-props'))}>
-                        {showSafeArea && <div className="safe-area" style={{ borderWidth: 1 / z }} title="Área segura da TV (90%)" />}
+                        {showSafeArea && <div className="safe-area" style={{ left: SAFE.x, top: SAFE.y, width: SAFE.w, height: SAFE.h, borderWidth: 1 / z }} title="Área segura da TV (90%)" />}
+                        {showFocusMap && focusMap && <FocusOverlay map={focusMap} hover={focusHover} zoom={z} />}
                         {emptyContainers.map((c) => rects[c.id] && (
                             <div key={'empty-' + c.id} className="ov-empty" style={{ left: rects[c.id].x, top: rects[c.id].y, width: rects[c.id].w, height: rects[c.id].h, borderWidth: 1.5 / z }}>
                                 <span style={{ transform: `scale(${1 / z})` }}>{c.type === 'stack' ? 'Stack vazia: arraste elementos para cá' : 'Container vazio'}</span>
@@ -511,7 +544,91 @@ export function Canvas() {
                     <button className="btn primary" onClick={() => useEditor.getState().customizePage(page)}>Personalizar esta tela</button>
                 </div>
             )}
+            {ready && mode === 'edit' && showFocusMap && <FocusLegend page={page} />}
             {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
+        </div>
+    );
+}
+
+/** Smallest focus item under the point, or -1. */
+function focusItemAt(rs: Rect[], x: number, y: number): number {
+    let best = -1, area = Infinity;
+    rs.forEach((r, i) => {
+        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h && r.w * r.h < area) { best = i; area = r.w * r.h; }
+    });
+    return best;
+}
+
+const ARROW: Record<(typeof DIRS)[number], string> = { left: '◀', right: '▶', up: '▲', down: '▼' };
+
+/**
+ * Focus map: every item the remote can focus, numbered by how many arrow presses it
+ * takes from the initial focus (red: never reached). Hovering an item shows where
+ * each arrow goes from there.
+ */
+function FocusOverlay({ map, hover, zoom }: { map: FocusMap; hover: number; zoom: number }) {
+    const k = 1 / zoom;
+    const { items, graph, start } = map;
+    const h = hover >= 0 && hover < items.length ? hover : -1;
+    const center = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+    const stepsText = (s: number) => (s === -1 ? 'nunca recebe o foco pelas setas' : s === 0 ? 'foco inicial' : `${s} clique(s) a partir do início`);
+    return (
+        <>
+            {items.map((it, i) => {
+                const steps = graph.steps[i];
+                const cls = 'fm-item' + (i === start ? ' start' : steps === -1 ? ' lost' : '') + (i === h ? ' hover' : '');
+                return (
+                    <div key={i} className={cls} data-focus-index={i} data-steps={steps}
+                        style={{ left: it.rect.x, top: it.rect.y, width: it.rect.w, height: it.rect.h, borderWidth: 2 * k }}>
+                        <span className="fm-badge" style={{ transform: `scale(${k})` }}>{i === start ? 'início' : steps === -1 ? '!' : steps}</span>
+                    </div>
+                );
+            })}
+            {h >= 0 && (
+                <svg className="fm-arrows" width={STAGE_W} height={STAGE_H} viewBox={`0 0 ${STAGE_W} ${STAGE_H}`}>
+                    <defs>
+                        <marker id="fm-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M0 0 10 5 0 10z" fill="currentColor" />
+                        </marker>
+                    </defs>
+                    {DIRS.map((d) => {
+                        const n = graph.next[h][d];
+                        if (n === -1) return null;
+                        const a = center(items[h].rect), b = center(items[n].rect);
+                        return (
+                            <g key={d}>
+                                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={2.5 * k} markerEnd="url(#fm-head)" />
+                                <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fontSize={16 * k} textAnchor="middle" dominantBaseline="middle">{ARROW[d]}</text>
+                            </g>
+                        );
+                    })}
+                </svg>
+            )}
+            {h >= 0 && (
+                <div className="fm-tip" style={{ left: items[h].rect.x, top: items[h].rect.y + items[h].rect.h + 6 * k, transform: `scale(${k})`, transformOrigin: 'top left' }}>
+                    <strong>{items[h].label || 'item'}</strong>
+                    <span>{stepsText(graph.steps[h])}</span>
+                    <span>{DIRS.map((d) => `${ARROW[d]} ${graph.next[h][d] === -1 ? '(nada)' : items[graph.next[h][d]].label || 'item'}`).join('    ')}</span>
+                </div>
+            )}
+        </>
+    );
+}
+
+function FocusLegend({ page }: { page: string }) {
+    const map = useEditor((s) => s.audit.focus);
+    if (page !== 'home') {
+        return <div className="fm-legend">Mapa de foco: vale para a tela inicial. Nas outras telas, a navegação é a do próprio launcher.</div>;
+    }
+    if (!map) return null;
+    const lost = map.graph.steps.filter((s) => s === -1).length;
+    const far = Math.max(0, ...map.graph.steps);
+    return (
+        <div className="fm-legend" data-testid="focus-legend">
+            <span><i className="dot start" /> foco inicial</span>
+            <span><i className="dot" /> número = cliques nas setas até chegar</span>
+            <span><i className="dot lost" /> inalcançável</span>
+            <span className="fm-sum">{map.items.length} itens · o mais distante a {far} clique(s){lost ? ` · ${lost} inalcançável(is)` : ''}</span>
         </div>
     );
 }

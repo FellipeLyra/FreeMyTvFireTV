@@ -7,6 +7,8 @@ import { preview } from '../canvas/Canvas';
 /** Validation problems (from the shared engine) and canvas status. */
 export function BottomBar() {
     const v = useEditor((s) => s.validation);
+    const a11y = useEditor((s) => s.audit.issues);
+    const page = useEditor((s) => s.page);
     const renderErrors = useEditor((s) => s.renderErrors);
     const selection = useEditor((s) => s.selection);
     const [open, setOpen] = useState(false);
@@ -15,6 +17,8 @@ export function BottomBar() {
         ...renderErrors.map((m) => ({ kind: 'error' as const, path: '', message: 'canvas: ' + m })),
         ...v.errors.map((e) => ({ kind: 'error' as const, ...e })),
         ...v.warnings.map((e) => ({ kind: 'warning' as const, ...e })),
+        // Accessibility alerts never block exporting: they point at what is hard to use from the sofa.
+        ...a11y.map((a) => ({ kind: 'a11y' as const, path: a.nodeId ? `pages.${page} <${a.nodeId}>` : '', message: a.message, rule: a.rule })),
     ];
     const nErr = v.errors.length + renderErrors.length;
     const crumbs = selection.length === 1 ? T.pathTo(root, selection[0]).map((id) => T.find(root, id)!.node) : [];
@@ -37,9 +41,10 @@ export function BottomBar() {
                     {!issues.length && <div className="problem ok"><I.Check size={14} /> Nenhum problema. O layout pode ser exportado.</div>}
                     {issues.map((p, i) => (
                         <button key={i} className={'problem ' + p.kind} onClick={() => goto(p.path)}>
-                            {p.kind === 'error' ? <I.Error size={14} /> : <I.Warning size={14} />}
+                            {p.kind === 'error' ? <I.Error size={14} /> : p.kind === 'a11y' ? <I.Access size={14} /> : <I.Warning size={14} />}
                             <span className="problem-msg">{p.message}</span>
-                            {p.path && <code>{p.path.replace(/^pages\.home\.root/, 'tela').replace(/\.children\[\d+\]/g, ' ›').slice(0, 120)}</code>}
+                            {p.kind === 'a11y' && <code>{RULE_LABEL[(p as { rule: string }).rule]}</code>}
+                            {p.path && p.kind !== 'a11y' && <code>{p.path.replace(/^pages\.home\.root/, 'tela').replace(/\.children\[\d+\]/g, ' ›').slice(0, 120)}</code>}
                         </button>
                     ))}
                 </div>
@@ -48,6 +53,10 @@ export function BottomBar() {
                 <button className={'status-btn' + (nErr ? ' err' : v.warnings.length ? ' warn' : ' ok')} onClick={() => setOpen(!open)}>
                     {nErr ? <I.Error size={14} /> : v.warnings.length ? <I.Warning size={14} /> : <I.Check size={14} />}
                     {nErr ? `${nErr} erro(s)` : 'Válido'}{v.warnings.length ? ` · ${v.warnings.length} aviso(s)` : ''}
+                </button>
+                <button className={'status-btn' + (a11y.length ? ' a11y' : ' ok')} onClick={() => setOpen(!open)} data-testid="a11y-status"
+                    title="Alertas de acessibilidade: foco, contraste, tamanho do texto, área segura e resolução. Não impedem exportar.">
+                    <I.Access size={14} /> {a11y.length ? `${a11y.length} alerta(s) de acessibilidade` : 'Acessibilidade ok'}
                 </button>
                 <nav className="crumbs" aria-label="Caminho do elemento">
                     {crumbs.map((n, i) => (
@@ -62,6 +71,10 @@ export function BottomBar() {
         </footer>
     );
 }
+
+const RULE_LABEL: Record<string, string> = {
+    unreachable: 'foco', contrast: 'contraste', 'text-size': 'tamanho do texto', 'safe-area': 'área segura', resolution: 'resolução',
+};
 
 /** On-screen remote for the preview mode; the keyboard arrows work too. */
 export function RemotePanel() {

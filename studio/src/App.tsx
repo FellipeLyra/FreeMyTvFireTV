@@ -82,6 +82,8 @@ export function App() {
             else if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); s.setZoom(s.zoom * 1.25); }
             else if (mod && e.key === '-') { e.preventDefault(); s.setZoom(s.zoom / 1.25); }
             else if ((mod && e.key === '0') || (e.shiftKey && e.code === 'Digit1')) { e.preventDefault(); window.dispatchEvent(new Event('fmtv:fit')); }
+            else if (e.shiftKey && !mod && e.code === 'Digit0') { e.preventDefault(); window.dispatchEvent(new Event('fmtv:actual-size')); }
+            else if (k === 'f' && !mod && !e.shiftKey) { e.preventDefault(); s.toggle('showFocusMap'); }
             else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); s.deleteSelection(); }
             else if (e.key === 'Escape') { s.select([]); }
             else if (k === 'p' && !mod) { s.setMode('preview'); }

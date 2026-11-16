@@ -40,6 +40,8 @@ export const I = {
     ChevronDown: (p: P) => <Svg {...p}><path d="m6 9 6 6 6-6" /></Svg>,
     Fit: (p: P) => <Svg {...p}><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" /></Svg>,
     Grid: (p: P) => <Svg {...p}><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></Svg>,
+    Focus: (p: P) => <Svg {...p}><rect x="3" y="5" width="7" height="6" rx="1.5" /><rect x="14" y="13" width="7" height="6" rx="1.5" /><path d="M10 8h3a2 2 0 0 1 2 2v3" /><path d="m13 11 2 2 2-2" /></Svg>,
+    Access: (p: P) => <Svg {...p}><circle cx="12" cy="4.5" r="1.8" /><path d="M5 8.5 12 10l7-1.5M12 10v4.5M9 21l3-6.5 3 6.5" /></Svg>,
     Safe: (p: P) => <Svg {...p}><rect x="2" y="4" width="20" height="16" rx="2" /><rect x="5.5" y="7" width="13" height="10" rx="1" strokeDasharray="2 2" /></Svg>,
     StackH: (p: P) => <Svg {...p}><rect x="3" y="6" width="5" height="12" rx="1.2" /><rect x="10" y="6" width="5" height="12" rx="1.2" /><rect x="17" y="6" width="4" height="12" rx="1.2" /></Svg>,
     StackV: (p: P) => <Svg {...p}><rect x="6" y="3" width="12" height="5" rx="1.2" /><rect x="6" y="10" width="12" height="5" rx="1.2" /><rect x="6" y="17" width="12" height="4" rx="1.2" /></Svg>,
