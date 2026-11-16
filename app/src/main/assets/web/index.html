@@ -69,6 +69,7 @@
             display: none !important;
         }
 
+        :root.perf-mode [data-fmtv-id],
         :root.perf-mode .shelf-wrapper,
         body.perf-mode .shelf-wrapper,
         :root.perf-mode .header-btn,
@@ -930,13 +931,27 @@
         }
     </style>
     <script>
+        // Weak devices (1 GB of RAM, old Fire TV Sticks) get the light mode by
+        // themselves: no glass blur, no glow. "Auto" is the default; the user can
+        // still force either mode in Personalizar.
+        window.fmtvWeakDevice = function() {
+            if (window.__fmtvWeak !== undefined) return window.__fmtvWeak;
+            var weak = false;
+            try {
+                var p = window.FireTV && window.FireTV.deviceProfile ? JSON.parse(window.FireTV.deviceProfile() || '{}') : null;
+                if (p) weak = !!p.lowRam || (p.totalMemMb > 0 && p.totalMemMb < 1300) || /^(AFTM|AFTT|AFTSS|AFTB|AFTS)$/.test(p.model || '');
+            } catch (e) {}
+            return (window.__fmtvWeak = weak);
+        };
+    </script>
+    <script>
         (function() {
             try {
                 var t = localStorage.getItem('fmtv_theme');
                 if (t === 'oled') document.documentElement.classList.add('theme-oled');
                 else if (t === 'day') document.documentElement.classList.add('theme-day');
-                var p = localStorage.getItem('fmtv_perf_mode');
-                if (p === 'high') document.documentElement.classList.add('perf-mode');
+                var p = localStorage.getItem('fmtv_perf_mode') || 'auto';
+                if (p === 'high' || (p === 'auto' && window.fmtvWeakDevice())) document.documentElement.classList.add('perf-mode');
             } catch (e) {}
         })();
     </script>
@@ -1056,6 +1071,7 @@
                     <div class="field-group">
                         <label>Performance Mode</label>
                         <select class="field-input modal-nav" id="cfgPerfMode">
+                            <option value="auto">Auto (light on weak devices)</option>
                             <option value="standard">Standard (Glass & Glow)</option>
                             <option value="high">High Performance (60 FPS Boost)</option>
                         </select>
@@ -1267,7 +1283,7 @@
             lon: parseFloat(localStorage.getItem('fmtv_lon') || '0'),
             theme: localStorage.getItem('fmtv_theme') || 'auto',
             clockFormat: localStorage.getItem('fmtv_clock_format') || '24h',
-            perfMode: localStorage.getItem('fmtv_perf_mode') || 'standard',
+            perfMode: localStorage.getItem('fmtv_perf_mode') || 'auto',
             tmdbKey: localStorage.getItem('fmtv_tmdb_key') || '',
             ipLocate: localStorage.getItem('fmtv_ip_locate') || 'off',
             lang: localStorage.getItem('fmtv_lang') || 'auto',
@@ -1299,7 +1315,7 @@
                 'City Name (or leave Auto)': 'Nome da Cidade (ou deixe Auto)', 'Theme Mode': 'Tema',
                 'Auto (Follows Sunset)': 'Auto (Segue o Pôr do Sol)', 'Deep Midnight (Default)': 'Meia-Noite (Padrão)', 'Pure OLED Black': 'Preto OLED Puro', 'Daylight Blue': 'Azul Diurno',
                 'Clock Format': 'Formato do Relógio', '24-Hour (20:30)': '24 Horas (20:30)', '12-Hour (8:30 PM)': '12 Horas (8:30 PM)',
-                'Performance Mode': 'Modo de Desempenho', 'Standard (Glass & Glow)': 'Padrão (Vidro e Brilho)', 'High Performance (60 FPS Boost)': 'Alto Desempenho (60 FPS)',
+                'Performance Mode': 'Modo de Desempenho', 'Auto (light on weak devices)': 'Automático (leve em aparelhos fracos)', 'Standard (Glass & Glow)': 'Padrão (Vidro e Brilho)', 'High Performance (60 FPS Boost)': 'Alto Desempenho (60 FPS)',
                 'Auto-locate by IP (sends your IP to ipapi.co)': 'Localizar por IP (envia seu IP ao ipapi.co)', 'Off (use the city above)': 'Desligado (usar a cidade acima)', 'On': 'Ligado',
                 'TMDB API Key (Optional)': 'Chave da API TMDB (Opcional)', 'Language': 'Idioma', 'Auto (TV language)': 'Auto (idioma da TV)',
                 'Text Size (weather & clock)': 'Tamanho do texto (clima e relógio)', 'Normal': 'Normal', 'Large': 'Grande', 'Extra large': 'Extra grande',
@@ -1359,7 +1375,7 @@
                 'City Name (or leave Auto)': 'Nombre de la Ciudad (o deja Auto)', 'Theme Mode': 'Tema',
                 'Auto (Follows Sunset)': 'Auto (Sigue el Atardecer)', 'Deep Midnight (Default)': 'Medianoche (Predeterminado)', 'Pure OLED Black': 'Negro OLED Puro', 'Daylight Blue': 'Azul Diurno',
                 'Clock Format': 'Formato del Reloj', '24-Hour (20:30)': '24 Horas (20:30)', '12-Hour (8:30 PM)': '12 Horas (8:30 PM)',
-                'Performance Mode': 'Modo de Rendimiento', 'Standard (Glass & Glow)': 'Estándar (Cristal y Brillo)', 'High Performance (60 FPS Boost)': 'Alto Rendimiento (60 FPS)',
+                'Performance Mode': 'Modo de Rendimiento', 'Auto (light on weak devices)': 'Automático (ligero en equipos lentos)', 'Standard (Glass & Glow)': 'Estándar (Cristal y Brillo)', 'High Performance (60 FPS Boost)': 'Alto Rendimiento (60 FPS)',
                 'Auto-locate by IP (sends your IP to ipapi.co)': 'Ubicar por IP (envía tu IP a ipapi.co)', 'Off (use the city above)': 'Desactivado (usar la ciudad de arriba)', 'On': 'Activado',
                 'TMDB API Key (Optional)': 'Clave API de TMDB (Opcional)', 'Language': 'Idioma', 'Auto (TV language)': 'Auto (idioma del TV)',
                 'Text Size (weather & clock)': 'Tamaño del texto (clima y reloj)', 'Normal': 'Normal', 'Large': 'Grande', 'Extra large': 'Extra grande',
@@ -1419,7 +1435,7 @@
                 'City Name (or leave Auto)': 'Stadtname (oder Auto lassen)', 'Theme Mode': 'Design',
                 'Auto (Follows Sunset)': 'Auto (folgt dem Sonnenuntergang)', 'Deep Midnight (Default)': 'Mitternacht (Standard)', 'Pure OLED Black': 'Reines OLED-Schwarz', 'Daylight Blue': 'Tagesblau',
                 'Clock Format': 'Uhrzeitformat', '24-Hour (20:30)': '24 Stunden (20:30)', '12-Hour (8:30 PM)': '12 Stunden (8:30 PM)',
-                'Performance Mode': 'Leistungsmodus', 'Standard (Glass & Glow)': 'Standard (Glas & Glanz)', 'High Performance (60 FPS Boost)': 'Hohe Leistung (60 FPS)',
+                'Performance Mode': 'Leistungsmodus', 'Auto (light on weak devices)': 'Automatisch (leicht auf schwachen Geräten)', 'Standard (Glass & Glow)': 'Standard (Glas & Glanz)', 'High Performance (60 FPS Boost)': 'Hohe Leistung (60 FPS)',
                 'Auto-locate by IP (sends your IP to ipapi.co)': 'Standort per IP (sendet Ihre IP an ipapi.co)', 'Off (use the city above)': 'Aus (Stadt oben verwenden)', 'On': 'An',
                 'TMDB API Key (Optional)': 'TMDB-API-Schlüssel (optional)', 'Language': 'Sprache', 'Auto (TV language)': 'Auto (TV-Sprache)',
                 'Text Size (weather & clock)': 'Textgröße (Wetter & Uhr)', 'Normal': 'Normal', 'Large': 'Groß', 'Extra large': 'Sehr groß',
@@ -1479,7 +1495,7 @@
                 'City Name (or leave Auto)': 'Nom de la Ville (ou laissez Auto)', 'Theme Mode': 'Thème',
                 'Auto (Follows Sunset)': 'Auto (Suit le Coucher du Soleil)', 'Deep Midnight (Default)': 'Minuit (Par défaut)', 'Pure OLED Black': 'Noir OLED Pur', 'Daylight Blue': 'Bleu Jour',
                 'Clock Format': 'Format de l’Horloge', '24-Hour (20:30)': '24 Heures (20:30)', '12-Hour (8:30 PM)': '12 Heures (8:30 PM)',
-                'Performance Mode': 'Mode Performance', 'Standard (Glass & Glow)': 'Standard (Verre et Lueur)', 'High Performance (60 FPS Boost)': 'Haute Performance (60 FPS)',
+                'Performance Mode': 'Mode Performance', 'Auto (light on weak devices)': 'Automatique (léger sur appareils lents)', 'Standard (Glass & Glow)': 'Standard (Verre et Lueur)', 'High Performance (60 FPS Boost)': 'Haute Performance (60 FPS)',
                 'Auto-locate by IP (sends your IP to ipapi.co)': 'Localiser par IP (envoie votre IP à ipapi.co)', 'Off (use the city above)': 'Désactivé (utiliser la ville ci-dessus)', 'On': 'Activé',
                 'TMDB API Key (Optional)': 'Clé API TMDB (Facultatif)', 'Language': 'Langue', 'Auto (TV language)': 'Auto (langue de la TV)',
                 'Text Size (weather & clock)': 'Taille du texte (météo et horloge)', 'Normal': 'Normal', 'Large': 'Grand', 'Extra large': 'Très grand',
@@ -1655,8 +1671,12 @@
             if (state.textSize === 'large' || state.textSize === 'xlarge') root.classList.add('ts-' + state.textSize);
         }
 
+        function perfHigh() {
+            return state.perfMode === 'high' || (state.perfMode === 'auto' && window.fmtvWeakDevice());
+        }
+
         function applyPerfMode() {
-            if (state.perfMode === 'high') {
+            if (perfHigh()) {
                 document.body.classList.add('perf-mode');
                 document.documentElement.classList.add('perf-mode');
             } else {
@@ -1670,7 +1690,7 @@
             document.body.classList.remove('theme-day', 'theme-sunset', 'theme-oled');
             document.documentElement.classList.remove('theme-day', 'theme-sunset', 'theme-oled');
             var badge = document.getElementById('themeBadge');
-            var perfSuffix = state.perfMode === 'high' ? ' ⚡' : '';
+            var perfSuffix = perfHigh() ? ' ⚡' : '';
             if (state.theme === 'oled') {
                 document.body.classList.add('theme-oled');
                 document.documentElement.classList.add('theme-oled');
@@ -2326,7 +2346,7 @@
             heroDesc.textContent = t(item.dataset.desc || '');
 
             var color = item.dataset.color || '#0a84ff';
-            if (state.perfMode !== 'high') {
+            if (!perfHigh()) {
                 ambientGlow.style.background = 'radial-gradient(circle, ' + color + '35 0%, rgba(0,0,0,0) 70%)';
             }
         }
@@ -2592,7 +2612,7 @@
             document.getElementById('cfgCity').value = '';
             document.getElementById('cfgTheme').value = 'auto';
             document.getElementById('cfgClockFormat').value = '24h';
-            document.getElementById('cfgPerfMode').value = 'standard';
+            document.getElementById('cfgPerfMode').value = 'auto';
             document.getElementById('cfgIpLocate').value = 'off';
             document.getElementById('cfgLang').value = 'auto';
             document.getElementById('cfgTextSize').value = 'normal';

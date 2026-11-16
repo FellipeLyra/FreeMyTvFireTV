@@ -1,6 +1,9 @@
 package io.github.fellipelyra.freemytv
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -37,6 +40,23 @@ class AppBridge(
     // ---- Published layouts (see fmtv/runtime.js and LayoutStore) ----
 
     /** JSON text of the layout to show, or "" for the built-in screen. Called once per page load. */
+    // ---- Device profile: the page turns on the light mode by itself on weak devices ----
+
+    /** {"lowRam","totalMemMb","memoryClass","cores","model","sdk"}; read once at page load. */
+    @JavascriptInterface
+    fun deviceProfile(): String {
+        val am = activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        return JSONObject()
+            .put("lowRam", am.isLowRamDevice)
+            .put("totalMemMb", mi.totalMem / (1024 * 1024))
+            .put("memoryClass", am.memoryClass)
+            .put("cores", Runtime.getRuntime().availableProcessors())
+            .put("model", Build.MODEL ?: "")
+            .put("sdk", Build.VERSION.SDK_INT)
+            .toString()
+    }
+
     // ---- Publishing over the internet (see CloudSync and fmtv/runtime.js) ----
 
     @JavascriptInterface

@@ -10,6 +10,9 @@
 //   - a layout whose name contains "falha-na-tv" fails to render (the TV rolls back);
 //   - `adb connect 192.168.0.77` gives an unauthorized device; 10.0.0.99 refuses;
 //   - any other private IPv4 connects as a Fire TV Stick on port 5555.
+//   - `fmtv check`: launch time, memory and frame stats come from each device's
+//     "perf" entry (the 1 GB stick is slower); an APK whose name contains
+//     "outra-assinatura" fails to install.
 // State lives in FAKE_ADB_DIR (default: <tmp>/fmtv-fake-adb).
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, copyFileSync, appendFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -22,11 +25,14 @@ const EXT = `/sdcard/Android/data/${PKG}/files`;
 const ROOT = process.env.FAKE_ADB_DIR || join(tmpdir(), 'fmtv-fake-adb');
 const STATE = join(ROOT, 'devices.json');
 const RENDER_DELAY_MS = 1200;
+/** Numbers `fmtv check` reads: a 2 GB 4K Max, and a 1 GB 3rd-generation stick. */
+const STRONG = { memKb: 1968312, launchMs: 1840, pssKb: 151234, jankPct: 4.2 };
+const WEAK = { memKb: 934612, launchMs: 3900, pssKb: 238410, jankPct: 14.6 };
 
 mkdirSync(ROOT, { recursive: true });
 const load = () => (existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {
     devices: {
-        G070VM2011FAKE: { state: 'device', model: 'AFTKA', name: 'Fire TV Stick 4K Max', system: 'Fire OS 8.1.0.3 (PS8103/3074)', android: '11', usb: true },
+        G070VM2011FAKE: { state: 'device', model: 'AFTKA', name: 'Fire TV Stick 4K Max', system: 'Fire OS 8.1.0.3 (PS8103/3074)', android: '11', usb: true, a11y: true },
     },
 });
 const db = load();
@@ -192,13 +198,21 @@ if (cmd === 'devices') {
         const was = db.devices[target];
         db.devices[target] = host === '192.168.0.77'
             ? { state: 'unauthorized', model: 'AFTSSS', name: 'Fire TV Stick', system: '', android: '' }
-            : { state: 'device', model: 'AFTSSS', name: 'Fire TV Stick (3ª geração)', system: 'Fire OS 7.6.6.9 (RS8146/4566)', android: '9', ...(was && was.state !== 'gone' ? was : {}) };
+            : { state: 'device', model: 'AFTSSS', name: 'Fire TV Stick (3ª geração)', system: 'Fire OS 7.6.6.9 (RS8146/4566)', android: '9', perf: WEAK, ...(was && was.state !== 'gone' ? was : {}) };
         out(was && was.state !== 'gone' ? `already connected to ${target}` : `connected to ${target}`);
         save();
     }
 } else if (cmd === 'disconnect') {
     const d = db.devices[args[1]];
     if (d && !d.usb) { d.state = 'gone'; save(); out(`disconnected ${args[1]}`); } else out(`error: no such device '${args[1]}'`);
+} else if (cmd === 'install') {
+    const s = pickDevice();
+    const apk = args[args.length - 1];
+    if (!existsSync(apk)) fail(`adb: failed to stat ${apk}: No such file or directory`);
+    if (/outra-assinatura/.test(apk)) { out('Performing Streamed Install'); out(`adb: failed to install ${apk}: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package ${PKG} signatures do not match newer version; ignoring!]`); process.exit(1); }
+    db.devices[s].app = true;
+    out('Performing Streamed Install'); out('Success');
+    save();
 } else if (cmd === 'push') {
     const s = pickDevice();
     const dest = local(s, args[2]);
@@ -214,6 +228,33 @@ if (cmd === 'devices') {
     const [sub, ...rest] = args.slice(1);
     const app = d.app !== false;
     if (sub === 'pm' && rest[0] === 'list') { if (app) out(`package:${PKG}`); }
+    else if (sub === 'cat' && rest[0] === '/proc/meminfo') out(`MemTotal:        ${(d.perf || STRONG).memKb} kB
+MemFree:          212340 kB`);
+    else if (sub === 'settings' && rest.join(' ') === 'get secure enabled_accessibility_services') out(d.a11y && app ? `${PKG}/${PKG}.HomeButtonService` : 'null');
+    else if (sub === 'am' && rest[0] === 'force-stop') { /* nothing to stop */ }
+    else if (sub === 'input' && rest[0] === 'keyevent') { d.keys = (d.keys || 0) + rest.length - 1; }
+    else if (sub === 'dumpsys' && rest[0] === 'gfxinfo') {
+        if (rest[2] === 'reset') d.keys = 0;
+        else {
+            const p = d.perf || STRONG;
+            const frames = (d.keys || 0) * 18;
+            const janky = Math.round(frames * p.jankPct / 100);
+            out(`Applications Graphics Acceleration Info:
+Stats since: 1234ns
+Total frames rendered: ${frames}
+Janky frames: ${janky} (${frames ? (janky / frames * 100).toFixed(2) : '0.00'}%)
+50th percentile: 9ms
+90th percentile: ${p.jankPct > 10 ? 21 : 13}ms
+95th percentile: ${p.jankPct > 10 ? 34 : 17}ms`);
+        }
+    } else if (sub === 'dumpsys' && rest[0] === 'meminfo') {
+        const p = d.perf || STRONG;
+        out(`Applications Memory Usage (in Kilobytes):
+** MEMINFO in pid 4242 [${PKG}] **
+                   Pss  Private
+        TOTAL   ${p.pssKb}   ${p.pssKb - 20000}
+ TOTAL PSS:   ${p.pssKb}            TOTAL RSS:   ${p.pssKb + 60000}`);
+    }
     else if (sub === 'dumpsys') { if (app) out(`Packages:\n  Package [${PKG}]\n    versionCode=42 minSdk=22 targetSdk=34\n    versionName=1.0.0-dev.42`); }
     else if (sub === 'getprop') out([`[ro.product.model]: [${d.model}]`, '[ro.product.manufacturer]: [Amazon]', `[ro.build.version.name]: [${d.system}]`, `[ro.build.version.release]: [${d.android}]`].join('\n'));
     else if (sub === 'cat') {
@@ -223,8 +264,15 @@ if (cmd === 'devices') {
     else if (sub === 'mkdir') { const f = local(s, rest[rest.length - 1]); if (f) mkdirSync(f, { recursive: true }); }
     else if (sub === 'am' && rest[0] === 'start') {
         if (!app) fail('Error: Activity not started, unable to resolve Intent');
-        const action = rest[rest.indexOf('-a') + 1];
+        const ai = rest.indexOf('-a');
+        const action = ai >= 0 ? rest[ai + 1] : 'android.intent.action.MAIN';
         out('Starting: Intent { act=' + action + ' }');
+        if (rest.includes('-W')) { const t = (d.perf || STRONG).launchMs; out(`Status: ok
+LaunchState: COLD
+Activity: ${PKG}/.MainActivity
+TotalTime: ${t}
+WaitTime: ${t + 22}
+Complete`); }
         if (action.endsWith('IMPORT_LAYOUT')) importFromInbox(s);
         else if (action.endsWith('ROLLBACK_LAYOUT')) rollback(s, 'pedido pelo Studio');
         else if (action.endsWith('RESET_LAYOUT')) reset(s);

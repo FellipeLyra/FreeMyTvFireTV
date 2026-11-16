@@ -14,6 +14,7 @@ import { connect as tcpConnect } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { Adb, AdbError, findAdb } from './adb.mjs';
 import { unzip, engine } from './package.mjs';
+import { runCheck, formatReport } from './check.mjs';
 
 export const API = '/api/fmtv/';
 const MAX_BODY = 40 * 1024 * 1024;
@@ -194,6 +195,25 @@ export function createBridge({ adbPath = process.env.ADB || null } = {}) {
             if (!r) throw new HttpError(504, 'a TV não respondeu');
             return { result: r };
         }),
+        // Phase 9: test the device (launch time, memory, smoothness, publish), streamed like publish.
+        'POST check': async ({ res, json }) => {
+            const serial = json.serial;
+            res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
+            const send = (o) => res.write(JSON.stringify(o) + '\n');
+            try {
+                await exclusive(serial, async () => {
+                    if (typeof serial !== 'string' || !serial) throw new HttpError(400, 'escolha um aparelho');
+                    const adb = adbFor(null, (m) => send({ type: 'log', message: m }));
+                    await adb.select(serial);
+                    const report = await runCheck(adb, { publish: json.publish !== false, log: (m) => send({ type: 'log', message: m }) });
+                    send({ type: 'result', result: { ...report, markdown: formatReport(report) } });
+                });
+            } catch (e) {
+                send({ type: 'error', message: e.message });
+            }
+            res.end();
+            return undefined;
+        },
         'GET log': async ({ query }) => {
             const adb = await ready(query.get('serial'));
             return { lines: await adb.readLog() };

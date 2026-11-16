@@ -416,6 +416,37 @@ try {
         writeFileSync(SHOT.replace(/\.png$/, '-focus.png'), Buffer.from(shotF.data, 'base64'));
     }
 
+    // Phase 9: performance alerts and "Otimizar imagens", with a real 4000x3000 image made in the page.
+    console.log('\n[Studio e2e: desempenho em aparelhos fracos]');
+    {
+        await evaluate(`${S}.setLeftTab('assets')`);
+        const perfText = () => evaluate(`document.querySelector('[data-testid=perf-status]').textContent`);
+        check('layout leve: desempenho ok', /Desempenho ok/.test(await perfText()), await perfText());
+        await evaluate(`(async () => {
+            const c = document.createElement('canvas'); c.width = 4000; c.height = 3000;
+            const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 4000, 3000); gr.addColorStop(0, '#203060'); gr.addColorStop(1, '#e08040'); g.fillStyle = gr; g.fillRect(0, 0, 4000, 3000);
+            const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
+            ${S}.addAsset({ id: 'foto', file: 'foto.jpg', bytes: bytes.length, sha256: hash, width: 4000, height: 3000 }, btoa(bin));
+        })()`);
+        await sleep(400);
+        check('foto de 4000×3000: alerta de desempenho com a memória que gasta na TV', /1 alerta\(s\) de desempenho/.test(await perfText()), await perfText());
+        const wasOpen = await evaluate(`!!document.querySelector('.problems')`);
+        if (!wasOpen) await evaluate(`document.querySelector('[data-testid=perf-status]').click()`);
+        await sleep(200);
+        const perfMsg = await evaluate(`(Array.from(document.querySelectorAll('.problem.perf')).map(e => e.textContent).join(' | '))`);
+        check('o alerta explica e sugere "Otimizar imagens"', /4000×3000/.test(perfMsg) && /1920×1440/.test(perfMsg) && /Otimizar imagens/.test(perfMsg), perfMsg);
+        if (!wasOpen) await evaluate(`document.querySelector('[data-testid=perf-status]').click()`);
+        const opt = await evaluate(`!!document.querySelector('[data-testid=optimize-images]')`);
+        if (opt) await evaluate(`document.querySelector('[data-testid=optimize-images]').click()`);
+        await waitFor(`(${S}.project.layout.assets || []).some(a => a.id === 'foto' && a.width === 1920)`, 8000).catch(() => {});
+        const foto = await evaluate(`(${S}.project.layout.assets || []).find(a => a.id === 'foto')`);
+        check('"Otimizar imagens" reduz para 1920×1440 e o alerta some', opt && foto.width === 1920 && foto.height === 1440 && /Desempenho ok/.test(await perfText()), JSON.stringify(foto) + ' ' + (await perfText()));
+        await evaluate(`${S}.removeAsset('foto')`);
+    }
+
     // Phase 7: publishing over ADB, against the pretend Fire TV of `npm run dev:fake-tv`.
     const hi = await evaluate(`fetch('/api/fmtv/hello', { headers: { 'x-fmtv-studio': '1' } }).then(r => r.json()).catch(() => null)`);
     if (!hi || !hi.simulated) {
@@ -475,6 +506,19 @@ try {
         await waitFor(`!!document.querySelector('[data-testid=device-log]') && /importado/.test(document.querySelector('[data-testid=device-log]').textContent)`, 8000).catch(() => {});
         const tvLog = await evaluate(`(document.querySelector('[data-testid=device-log]') || {}).textContent || ''`);
         check('histórico da própria TV: importações, falha e rollbacks', /importado cinema/.test(tvLog) && /falhou/.test(tvLog) && /desativado/.test(tvLog), tvLog.slice(0, 300));
+
+        // Phase 9: "Testar aparelho" runs fmtv check through the bridge.
+        await click(`.dev-item[data-serial="${FAKE}"] [data-testid=check-device]`);
+        await jobDone(60000);
+        const rep = await evaluate(`(document.querySelector('[data-testid=check-report]') || {}).textContent || ''`);
+        check('"Testar aparelho": mede abertura, memória e fluidez e publica um teste', (await evaluate(`${D}.job.ok`)) && /Tempo para abrir/.test(rep) && /1,8 s/.test(rep) && /Memória usada/.test(rep) && /Fluidez/.test(rep) && /confirmado na TV/.test(rep), rep.slice(0, 300));
+        check('depois do teste a TV volta como estava (Cinema)', /layout "Cinema" de volta/.test(rep) && /Na TV: Cinema confirmado/.test(await evaluate(`${card(FAKE)}.textContent`)), rep.slice(-200));
+        if (SHOT) {
+            await evaluate(`document.querySelector('[data-testid=check-report]').scrollIntoView({ block: 'end' })`);
+            await sleep(300);
+            const shotK = await send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(SHOT.replace(/\.png$/, '-check.png'), Buffer.from(shotK.data, 'base64'));
+        }
 
         // Connect a second TV by IP, typing like a person.
         await click('[data-testid=device-address]');

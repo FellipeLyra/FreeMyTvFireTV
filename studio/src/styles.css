@@ -398,3 +398,17 @@ textarea.text-field { height: auto; padding: 6px 7px; resize: vertical; line-hei
 .dev-section:not(:first-child) { padding-top: 10px; border-top: 1px solid var(--line); }
 .dev-add .text-field.code-field { flex: 0 0 140px; font-family: ui-monospace, Consolas, monospace; letter-spacing: 1px; }
 .dev-layout .warn { color: var(--warning); }
+
+/* Phase 9: performance alerts */
+.status-btn.perf { color: var(--warning); }
+.problem.perf svg { color: var(--warning); }
+
+/* Phase 9: device test */
+.dev-check { margin-top: 8px; display: grid; gap: 8px; justify-items: start; }
+.dev-check table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dev-check td { padding: 4px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+.dev-check td.st { width: 16px; font-weight: 700; }
+.dev-check tr.ok td.st { color: var(--success, #30d158); }
+.dev-check tr.warn td.st { color: var(--warning); }
+.dev-check tr.fail td.st { color: var(--danger, #ff453a); }
+.dev-check .hint { color: var(--text-3); margin-top: 2px; }

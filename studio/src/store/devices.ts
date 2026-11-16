@@ -19,7 +19,7 @@ export interface HistoryEntry {
 
 export interface Job {
     serial: string;
-    op: 'publish' | 'rollback' | 'reset' | 'connect' | 'scan' | 'pair';
+    op: 'publish' | 'rollback' | 'reset' | 'connect' | 'scan' | 'pair' | 'check';
     logs: string[];
     done: boolean;
     ok?: boolean;
@@ -39,6 +39,8 @@ interface DevicesState {
     history: HistoryEntry[];
     job: Job | null;
     found: string[] | null;
+    /** Phase 9: last device test, shown under that device. */
+    report: { serial: string; result: D.CheckReport } | null;
     /** Phase 8: TVs paired through a Free My TV Cloud server (selected as "cloud:<id>"). */
     cloud: C.CloudTarget[];
     cloudServer: string;
@@ -52,6 +54,7 @@ interface DevicesState {
     scan(): Promise<void>;
     publish(serial?: string): Promise<void>;
     command(serial: string, op: 'rollback' | 'reset'): Promise<void>;
+    check(serial: string): Promise<void>;
     refreshCloud(): Promise<void>;
     pairCloud(server: string, code: string): Promise<void>;
     unpairCloud(deviceId: string): Promise<void>;
@@ -106,6 +109,7 @@ export const useDevices = create<DevicesState>((set, get) => {
         error: null,
         ...prefs,
         job: null,
+        report: null,
         found: null,
         cloudDevices: {},
 
@@ -244,6 +248,25 @@ export const useDevices = create<DevicesState>((set, get) => {
                 finish(false, fail(e));
             }
             if (isCloud(serial)) get().refreshCloud(); else get().refresh();
+        },
+
+        async check(serial) {
+            if (get().job && !get().job!.done) return;
+            set({ report: null, job: { serial, op: 'check', logs: ['testando o aparelho (leva uns 30 segundos; a TV abre o Free My TV e o foco anda sozinho)…'], done: false } });
+            const log = (m: string) => { const j = get().job; if (j) set({ job: { ...j, logs: [...j.logs, m] } }); };
+            try {
+                const result = await D.checkDevice(serial, log);
+                const fails = result.items.filter((i) => i.status === 'fail').length;
+                const warns = result.items.filter((i) => i.status === 'warn').length;
+                set({
+                    report: { serial, result },
+                    job: { serial, op: 'check', logs: [], done: true, ok: !fails && !warns, warn: !fails && !!warns,
+                        message: fails ? `${fails} problema(s) no teste` : warns ? `funcionou, com ${warns} aviso(s)` : 'tudo certo neste aparelho' },
+                });
+            } catch (e) {
+                set({ job: { serial, op: 'check', logs: [], done: true, ok: false, message: fail(e) } });
+            }
+            get().refresh();
         },
 
         async command(serial, op) {

@@ -46,17 +46,20 @@ const SCENARIOS = {
     streaming: { layout: layoutJson('streaming'), assets: null },
     screens: { layout: layoutJson('all-screens'), assets: null },
     cinema: { layout: layoutJson('cinema'), assets: join(EXAMPLES, 'cinema-assets') },
+    // A 1 GB Fire TV Stick (3rd generation): the light mode turns on by itself.
+    weak: { layout: layoutJson('classic'), assets: null, profile: { lowRam: false, totalMemMb: 912, memoryClass: 128, cores: 4, model: 'AFTSSS', sdk: 28 } },
     invalid: { layout: JSON.stringify(invalid) },
 };
 
 // Runs inside the page before firetv-bridge.js: a recording stand-in for AppBridge.
-const MOCK = (layout) => `<script>
+const MOCK = (layout, profile) => `<script>
 (function(){
   var log = window.__fmtvTestLog = { calls: [], errors: [], focus: [] };
   window.addEventListener('error', function(e){ log.errors.push(String(e.message)); });
   try { localStorage.clear(); localStorage.setItem('fmtv_lang','pt'); localStorage.setItem('fmtv_city','São Paulo'); } catch (e) {}
   var installed = ['com.amazon.firetv.youtube','com.netflix.ninja','com.amazon.avod','com.disney.disneyplus','com.wbd.stream','com.globo.globotv'];
   window.FireTV = {
+    deviceProfile: function(){ return ${JSON.stringify(JSON.stringify(profile || { lowRam: false, totalMemMb: 1900, memoryClass: 256, cores: 4, model: 'AFTKA', sdk: 30 }))}; },
     getLayoutJson: function(){ log.calls.push(['getLayoutJson']); return ${JSON.stringify(layout)}; },
     layoutRendered: function(id){ log.calls.push(['layoutRendered', id]); },
     layoutFailed: function(id, reason){ log.calls.push(['layoutFailed', id, reason]); },
@@ -96,6 +99,8 @@ const MOCK = (layout) => `<script>
         appsGridInRoot: !!(root && root.querySelector('#appsGrid')),
         parked: Array.prototype.map.call(document.querySelectorAll('#fmtvParking > *'), function(e){ return e.id || e.className; }),
         restoreButton: !!document.getElementById('fmtvRestoreLayout'),
+        perf: document.documentElement.classList.contains('perf-mode'),
+        blurred: Array.prototype.filter.call(document.querySelectorAll('[data-fmtv-id], .shelf-wrapper, .header-btn'), function(e){ var f = getComputedStyle(e).backdropFilter; return f && f !== 'none'; }).length,
         rootBackground: root ? getComputedStyle(root).backgroundImage.slice(0, 120) : null,
         tiles: document.querySelectorAll('#appsGrid .app-tile').length,
         rows: Array.prototype.map.call(document.querySelectorAll('.fmtv-row'), function(r){ return r.querySelectorAll('.fmtv-card').length; }),
@@ -204,7 +209,7 @@ const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     if (url.pathname === '/assets/web/index.html' || url.pathname === '/assets/web/') {
         const html = readFileSync(join(WEB, 'index.html'), 'utf8')
-            .replace('<script src="firetv-bridge.js"></script>', MOCK(SCENARIOS[current].layout) + '<script src="firetv-bridge.js"></script>');
+            .replace('<script src="firetv-bridge.js"></script>', MOCK(SCENARIOS[current].layout, SCENARIOS[current].profile) + '<script src="firetv-bridge.js"></script>');
         res.writeHead(200, { 'content-type': TYPES['.html'] });
         res.end(html);
     } else if (url.pathname.startsWith('/assets/web/')) {
@@ -268,6 +273,8 @@ for (const name of Object.keys(SCENARIOS).filter((n) => !process.env.FMTV_ONLY |
         check('tela original intacta', !log.dom.root && log.dom.containerHidden === false);
         check('prateleira com apps', log.dom.tiles > 0, String(log.dom.tiles));
     }
+    if (name === 'weak') check('aparelho fraco (1 GB): modo leve ligado sozinho, sem desfoque', log.dom.perf && log.dom.blurred === 0, JSON.stringify({ perf: log.dom.perf, blurred: log.dom.blurred }));
+    else check('aparelho bom: efeitos completos (modo automático)', !log.dom.perf && log.dom.blurred > 0, JSON.stringify({ perf: log.dom.perf, blurred: log.dom.blurred }));
     if (name === 'none') check('nada reportado ao app', !calls.includes('layoutRendered') && !calls.includes('layoutFailed'));
     if (name === 'none') {
         const c = log.cloud || {};

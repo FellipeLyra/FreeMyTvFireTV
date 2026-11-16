@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "bin/fmtv.exe": "bin/fmtv.exe",
+      "bin/adb/adb.exe": "bin/adb/adb.exe",
+      "bin/adb/AdbWinApi.dll": "bin/adb/AdbWinApi.dll",
+      "bin/adb/AdbWinUsbApi.dll": "bin/adb/AdbWinUsbApi.dll",
+      "bin/adb/NOTICE.txt": "bin/adb/NOTICE.txt"
+    }
+  }
+}

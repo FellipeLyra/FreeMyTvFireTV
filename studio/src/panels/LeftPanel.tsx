@@ -6,6 +6,9 @@ import type { LayoutNode } from '../model/types';
 import { I, iconForType } from '../ui/icons';
 import { bytesToBase64, sha256Hex } from '../lib/bytes';
 import { pickFiles } from '../lib/storage';
+import { shrinkForTv, mimeOf } from '../lib/images';
+import { fitSize } from '../model/perf';
+import { base64ToBytes } from '../lib/bytes';
 import { BUILTIN_BLOCKS, type Block } from '../model/blocks';
 import { PAGE_HINTS } from '../model/pages';
 
@@ -312,7 +315,13 @@ function Assets() {
             try {
                 if (!/^image\/(png|jpeg|webp)$/.test(f.type)) throw new Error(`${f.name}: use PNG, JPG ou WebP`);
                 if (f.size > E.LIMITS.assetBytes) throw new Error(`${f.name}: maior que ${Math.round(E.LIMITS.assetBytes / 1048576)} MB`);
-                const bytes = new Uint8Array(await f.arrayBuffer());
+                let bytes = new Uint8Array(await f.arrayBuffer());
+                // Bigger than the TV screen: shrink now, so the TV never decodes a 12-megapixel photo.
+                let shrunk: string | null = null;
+                try {
+                    const r = await shrinkForTv(bytes, f.type);
+                    if (r) { bytes = r.bytes; shrunk = `reduzida de ${r.from.w}×${r.from.h} para ${r.width}×${r.height}, o que a TV mostra`; }
+                } catch { /* keep the original */ }
                 const ext = f.type === 'image/png' ? 'png' : f.type === 'image/webp' ? 'webp' : 'jpg';
                 const existing = new Set((s().project.layout.assets || []).map((a) => a.id));
                 const files = new Set((s().project.layout.assets || []).map((a) => a.file));
@@ -328,11 +337,29 @@ function Assets() {
                     width = bmp.width; height = bmp.height; bmp.close();
                 } catch { /* size is optional */ }
                 s().addAsset({ id, file, bytes: bytes.length, sha256: await sha256Hex(bytes), width, height }, bytesToBase64(bytes));
-                s().toast(`imagem ${file} importada`, 'success');
+                s().toast(`imagem ${file} importada${shrunk ? ` (${shrunk})` : ''}`, 'success');
             } catch (e) {
                 s().toast((e as Error).message, 'error');
             }
         }
+    };
+
+    const oversized = assets.filter((a) => a.width && a.height && fitSize(a.width, a.height));
+    const optimize = async () => {
+        let done = 0;
+        for (const a of oversized) {
+            const b64 = s().project.assetData[a.id];
+            if (!b64) continue;
+            try {
+                const r = await shrinkForTv(base64ToBytes(b64), mimeOf(a.file));
+                if (!r) continue;
+                s().addAsset({ ...a, bytes: r.bytes.length, sha256: await sha256Hex(r.bytes), width: r.width, height: r.height }, bytesToBase64(r.bytes));
+                done++;
+            } catch (e) {
+                s().toast(`${a.file}: ${(e as Error).message}`, 'error');
+            }
+        }
+        if (done) s().toast(`${done} imagem(ns) reduzida(s) para o tamanho da tela da TV`, 'success');
     };
 
     const useAsBackground = (id: string) => {
@@ -344,7 +371,13 @@ function Assets() {
     return (
         <div className="assets">
             <button className="btn btn-block" onClick={importFiles}><I.Upload size={15} /> Importar imagens</button>
-            {!assets.length && <p className="panel-note">Nenhuma imagem ainda. PNG, JPG ou WebP, até 8 MB cada.</p>}
+            {!assets.length && <p className="panel-note">Nenhuma imagem ainda. PNG, JPG ou WebP, até 8 MB cada. Imagens maiores que a tela da TV são reduzidas ao importar.</p>}
+            {oversized.length > 0 && (
+                <button className="btn btn-block" onClick={optimize} data-testid="optimize-images"
+                    title="Reduz para o menor tamanho que ainda cobre a tela de 1920×1080: fica igual na TV e gasta muito menos memória">
+                    <I.Bolt size={15} /> Otimizar imagens ({oversized.length})
+                </button>
+            )}
             <div className="asset-grid">
                 {assets.map((a) => (
                     <div key={a.id} className="asset" draggable onDragStart={(e) => { e.dataTransfer.setData('application/x-fmtv-asset', a.id); e.dataTransfer.effectAllowed = 'copy'; }}>

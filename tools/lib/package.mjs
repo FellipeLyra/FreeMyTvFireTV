@@ -5,10 +5,11 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { createRequire } from 'node:module';
+// The same engine.js the TV runs (CommonJS/UMD): a plain import also lets the
+// desktop Studio bundle the CLI into one executable (studio/scripts/build-bridge.mjs).
+import engineModule from '../../app/src/main/assets/web/fmtv/engine.js';
 
-const require = createRequire(import.meta.url);
-export const engine = require('../../app/src/main/assets/web/fmtv/engine.js');
+export const engine = engineModule;
 
 const CRC_TABLE = (() => {
     const t = new Uint32Array(256);

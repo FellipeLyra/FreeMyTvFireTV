@@ -34,6 +34,7 @@ export const I = {
     Unlock: (p: P) => <Svg {...p}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" /></Svg>,
     Trash: (p: P) => <Svg {...p}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M9 7V4h6v3" /></Svg>,
     Copy: (p: P) => <Svg {...p}><rect x="8" y="8" width="13" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></Svg>,
+    Bolt: (p: P) => <Svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></Svg>,
     Plus: (p: P) => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>,
     Minus: (p: P) => <Svg {...p}><path d="M5 12h14" /></Svg>,
     Chevron: (p: P) => <Svg {...p}><path d="m9 6 6 6-6 6" /></Svg>,

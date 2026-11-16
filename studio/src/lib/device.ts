@@ -97,6 +97,25 @@ export async function publish(serial: string, bytes: Uint8Array, onLog: (m: stri
     const res = await req('publish?serial=' + encodeURIComponent(serial), {
         method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: bytes.slice().buffer,
     });
+    return follow<PublishResult>(res, onLog);
+}
+
+/** Phase 9: what `fmtv check` measured on the device. */
+export interface CheckItem { id: string; label: string; status: 'ok' | 'warn' | 'fail' | 'skip'; value: string; hint: string }
+export interface CheckReport {
+    device: { serial: string; model: string; system: string; android: string; ramMb: number | null };
+    items: CheckItem[];
+    markdown: string;
+}
+
+/** Test the device: launch time, memory, smoothness and publishing (the TV is put back as it was). */
+export async function checkDevice(serial: string, onLog: (m: string) => void): Promise<CheckReport> {
+    const res = await req('check', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ serial }) });
+    return follow<CheckReport>(res, onLog);
+}
+
+/** Read an NDJSON progress stream from the bridge until its result. */
+async function follow<T>(res: Response, onLog: (m: string) => void): Promise<T> {
     const reader = res.body!.getReader();
     const dec = new TextDecoder();
     let buf = '';
@@ -110,7 +129,7 @@ export async function publish(serial: string, bytes: Uint8Array, onLog: (m: stri
             if (!line) continue;
             const m = JSON.parse(line);
             if (m.type === 'log') onLog(m.message);
-            else if (m.type === 'result') return m.result as PublishResult;
+            else if (m.type === 'result') return m.result as T;
             else if (m.type === 'error') throw new BridgeError(m.message);
         }
         if (done) break;

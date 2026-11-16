@@ -133,8 +133,11 @@ export function DevicesDialog() {
                                                 {ready && <button className="btn btn-small" disabled={busy || !lay?.active} onClick={() => s.command(d.serial, 'reset')}
                                                     title="Mostra a tela original do Free My TV; o layout fica guardado como anterior">Tela original</button>}
                                                 {ready && <button className={'btn btn-small' + (logFor === d.serial ? ' on' : '')} onClick={() => showLog(d.serial)}>Histórico da TV</button>}
+                                                {d.state === 'device' && <button className="btn btn-small" disabled={busy} onClick={() => s.check(d.serial)} data-testid="check-device"
+                                                    title="Mede o tempo para abrir, a memória e a fluidez, e publica um layout de teste; no fim a TV volta como estava">Testar aparelho</button>}
                                                 {d.network && <button className="btn btn-small" disabled={busy} onClick={() => s.disconnect(d.serial)}>Desconectar</button>}
                                             </div>
+                                            {s.report?.serial === d.serial && <CheckReportView r={s.report.result} />}
                                             {logFor === d.serial && (
                                                 <div className="dev-log" data-testid="device-log">
                                                     {!logLines ? 'lendo…' : logLines.length ? logLines.map((l, i) => <div key={i}>{l}</div>) : 'nenhum layout publicado ainda nesta TV'}
@@ -232,6 +235,30 @@ function CloudSection({ busy, layoutName }: { busy: boolean; layoutName: string 
                 })}
             </div>
         </>
+    );
+}
+
+/** Phase 9: what the device test measured, with a Markdown copy for an issue. */
+function CheckReportView({ r }: { r: D.CheckReport }) {
+    const [copied, setCopied] = useState(false);
+    const icon = { ok: '✓', warn: '!', fail: '✗', skip: '–' };
+    return (
+        <div className="dev-check" data-testid="check-report">
+            <table>
+                <tbody>
+                    {r.items.map((i) => (
+                        <tr key={i.id} className={i.status}>
+                            <td className="st">{icon[i.status]}</td>
+                            <td>{i.label}</td>
+                            <td><b>{i.value}</b>{i.hint && <div className="hint">{i.hint}</div>}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            <button className="btn btn-small" onClick={() => { navigator.clipboard?.writeText(r.markdown).then(() => setCopied(true), () => {}); }}>
+                {copied ? 'Copiado' : 'Copiar relatório (Markdown)'}
+            </button>
+        </div>
     );
 }
 

@@ -2,7 +2,7 @@
 
 Editor visual para PC que cria e edita a tela inicial do Free My TV. Ele gera layouts no [formato schema v1](../docs/layouts.md), que o app do Fire TV aplica sem precisar recompilar.
 
-> **Status: Fases 3 a 8 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos, exportação, mapa de foco, alertas de acessibilidade, prévia por resolução, **publicação no Fire TV pelo ADB** e **publicação pela internet** ([docs/cloud.md](../docs/cloud.md)) já funcionam. As duas publicações foram testadas com Fire TVs simulados; falta validar num aparelho.
+> **Status: Fases 3 a 9 do roadmap.** Edição visual, auto layout, posicionamento absoluto, drag and drop, desfazer/refazer, projetos, exportação, mapa de foco, alertas de acessibilidade, prévia por resolução, **publicação no Fire TV pelo ADB** e **publicação pela internet** ([docs/cloud.md](../docs/cloud.md)), alertas de desempenho e **teste do aparelho** já funcionam, e o instalador traz a ponte com a TV. As publicações foram testadas com Fire TVs simulados; falta validar num aparelho ([roteiro](../docs/device-testing.md)).
 
 ![Studio editando o layout Cinema](../docs/screenshots/studio-editor.jpg)
 
@@ -64,6 +64,8 @@ flowchart LR
 | **Dispositivos** | Botão **Dispositivo** na barra de cima. Lista os aparelhos que o `adb` enxerga, com nome do modelo, Fire OS, versão do Free My TV e o layout que está na TV (confirmado ou aguardando, e o anterior). **Conectar por IP** (os IPs usados ficam lembrados) e **Procurar na rede** (aparelhos com a depuração ADB ligada na rede deste PC). Explica o que fazer quando a TV ainda não autorizou o PC, está sem resposta ou não tem o Free My TV |
 | **Pela internet** | Na mesma janela: endereço do servidor Free My TV Cloud e o código que a TV mostra em Personalizar → **Parear**. A TV pareada entra na lista, com "conectada" ou "fora do ar" e quando foi vista, e recebe as mesmas ações (Publicar, Voltar ao anterior, Tela original, Histórico, Remover). Uma TV fora do ar recebe o layout quando a tela inicial abrir. O Studio só aceita servidores `https://` (ou 127.0.0.1 para testes) |
 | **Publicar** | Envia o layout para o aparelho escolhido e mostra cada passo até a **TV confirmar que desenhou**. Se o layout falhar na TV, ela volta sozinha ao anterior e o Studio mostra o motivo. **Voltar ao anterior**, **Tela original** e **Histórico da TV** (o registro que o próprio app guarda) em cada aparelho; as publicações feitas deste PC ficam listadas |
+| **Testar aparelho** | Em cada aparelho conectado pelo ADB: abre o Free My TV, mede o tempo para abrir, a memória e a fluidez enquanto o foco anda sozinho, confere o botão Home e publica um layout de teste. No fim a TV volta como estava e aparece uma tabela com dicas e o botão **Copiar relatório** (Markdown para uma *issue*). É o mesmo `fmtv check` da linha de comando ([docs/device-testing.md](../docs/device-testing.md)) |
+| **Desempenho** | Alertas na barra de baixo pensando num Fire TV de 1 GB (não impedem exportar): **imagem maior que a tela** (com a memória que a TV gasta para mostrá-la), **imagens demais** (mais de 64 MB de memória), **desfoque** em mais de 3 elementos e **pacote pesado** (mais de 12 MB). Imagens maiores que 1920×1080 são **reduzidas ao importar** para o menor tamanho que ainda cobre a tela, e **Otimizar imagens** (aba Imagens) faz o mesmo com as que já estão no projeto. Na TV, o modo de desempenho **Automático** tira o desfoque e o brilho em aparelhos fracos |
 | **Problemas** | Erros e avisos do validador na barra inferior; clicar seleciona o elemento |
 
 <table>
@@ -85,6 +87,10 @@ flowchart LR
 
 <sub>Dispositivos, com o Fire TV simulado: o Cinema confirmado na TV, o histórico da própria TV (com uma falha que voltou sozinha ao anterior), um segundo aparelho conectado por IP e um terceiro esperando autorização.</sub>
 
+![Testar aparelho](../docs/screenshots/studio-check.jpg)
+
+<sub>Testar aparelho, com o Fire TV simulado: tempo para abrir, fluidez, memória e uma publicação de teste. No fim a TV volta ao Cinema, e o relatório pode ser copiado para uma <i>issue</i>.</sub>
+
 ![Pela internet](../docs/screenshots/studio-cloud.jpg)
 
 <sub>Pela internet: uma TV pareada com o servidor, o Cinema confirmado e o histórico que a TV mandou ao servidor (com uma falha que voltou sozinha ao anterior).</sub>
@@ -94,7 +100,8 @@ flowchart LR
 O navegador não consegue rodar o `adb`, então o Studio fala com uma **ponte local** ([`tools/lib/bridge.mjs`](../tools/lib/bridge.mjs)) que usa a mesma biblioteca da CLI.
 
 - Com `npm run dev` ou `npm run desktop`, a ponte já vem dentro do servidor do Studio. Não precisa de mais nada.
-- Com o Studio compilado (`npm run build` / instalador), rode a ponte num terminal: `node tools/fmtv.mjs serve` (porta 5611).
+- **Studio instalado:** a ponte vem junto. O instalador traz o `fmtv.exe` (a CLI num executável só) e o `adb`, e o Studio liga a ponte ao abrir e desliga ao fechar. Não precisa de Node nem do Android SDK.
+- Com o Studio compilado só para o navegador (`npm run build`), rode a ponte num terminal: `node tools/fmtv.mjs serve` (porta 5611).
 - **Sem aparelho:** `npm run dev:fake-tv` abre o Studio com um Fire TV simulado ([`tools/test/fake-adb.mjs`](../tools/test/fake-adb.mjs)), que se comporta como o app: confere o pacote, confirma o desenho, volta ao anterior quando falha. Um layout com "falha-na-tv" no nome simula uma falha na TV.
 
 **Segurança da ponte:** ela só faz operações fixas (listar, conectar, publicar, voltar, tela original, histórico), nunca comandos `adb` livres. Só escuta em 127.0.0.1, só aceita pedidos com o Host da própria máquina (contra DNS rebinding), de páginas do Studio (lista de origens) e com o cabeçalho `X-FMTV-Studio`, que um site de fora não consegue mandar sem uma autorização CORS que a ponte recusa. O pacote é validado de novo antes de ir para a TV, e cada aparelho faz uma operação por vez.
@@ -106,7 +113,7 @@ O navegador não consegue rodar o `adb`, então o Studio fala com uma **ponte lo
 
 ## Rodar
 
-Requisitos: Node 18+.
+Requisitos: Node 20+.
 
 ```
 cd studio
@@ -124,17 +131,19 @@ npm run desktop          # janela nativa com recarga automática
 npm run desktop:build    # gera o instalador em src-tauri/target/release/bundle/nsis/
 ```
 
+O `desktop:build` roda antes o `npm run bridge` ([`scripts/build-bridge.mjs`](scripts/build-bridge.mjs)). Ele empacota a CLI com o esbuild, transforma o resultado num executável com o `node --build-sea` (Node 25.5+) e copia o `adb.exe` e as DLLs do platform-tools (de `ADB_DIR`, `ANDROID_HOME` ou `~/android-build-tools/sdk`) para `src-tauri/bin/`. Essa pasta entra no instalador pelo `src-tauri/tauri.bundle.json`. O `adb` é do Android Open Source Project (Apache 2.0), e o `NOTICE.txt` dele vai junto.
+
 ## Testes
 
 ```
-npm test                 # 61 testes: árvore, constraints, stacks, auto layout, blocos, telas, histórico, arquivos, pacote, contraste, foco
+npm test                 # 65 testes: árvore, constraints, stacks, auto layout, blocos, telas, histórico, arquivos, pacote, contraste, foco, desempenho
 npm run dev              # em outro terminal
-npm run e2e              # 84 verificações no Chrome de verdade, com mouse e teclado (as 13 de publicação por ADB
+npm run e2e              # 90 verificações no Chrome de verdade, com mouse e teclado (as 15 de publicação por ADB
                          # rodam quando o Studio foi aberto com npm run dev:fake-tv; as 11 pela internet sobem
                          # um servidor e uma TV simulada sozinhas)
 ```
 
-O teste ponta a ponta usa eventos reais de mouse e teclado em cinco roteiros: o modelo Cinema, o modelo Em branco com auto layout na Tela, as outras telas (Clima, Personalizar, protetor e mensagens), o mapa de foco com os alertas e a publicação no Fire TV simulado (publicar, falha com volta automática, tela original, voltar ao anterior, histórico, conectar por IP e TV sem autorização), pelo ADB e pela internet (servidor sem https recusado, código errado, pareamento, publicar, falha, comandos, histórico e remover). No último, ele monta de propósito um botão escondido atrás de outro, um texto cinza-escuro de 12 px colado na borda e um texto de 17 px em 720p, e confere que cada alerta aparece e some quando deve. No modelo Cinema ele:
+O teste ponta a ponta usa eventos reais de mouse e teclado em cinco roteiros: o modelo Cinema, o modelo Em branco com auto layout na Tela, as outras telas (Clima, Personalizar, protetor e mensagens), o mapa de foco com os alertas, o desempenho (uma foto de 4000×3000 gera o alerta e **Otimizar imagens** a reduz para 1920×1440) e a publicação no Fire TV simulado (publicar, falha com volta automática, tela original, voltar ao anterior, histórico, **testar aparelho**, conectar por IP e TV sem autorização), pelo ADB e pela internet (servidor sem https recusado, código errado, pareamento, publicar, falha, comandos, histórico e remover). No último, ele monta de propósito um botão escondido atrás de outro, um texto cinza-escuro de 12 px colado na borda e um texto de 17 px em 720p, e confere que cada alerta aparece e some quando deve. No modelo Cinema ele:
 - seleciona, arrasta e redimensiona;
 - desfaz e refaz;
 - reordena dentro de uma stack e tira um elemento da stack;
@@ -176,7 +185,8 @@ studio/
 ## Limitações desta fase
 
 - **Publicação ainda não testada num Fire TV de verdade:** foi testada com o Fire TV simulado e com o `adb` real deste PC (sem aparelho conectado).
-- **Studio instalado:** precisa da ponte rodando (`node tools/fmtv.mjs serve`), ou seja, de Node e do repositório. Embutir a ponte e o `adb` no instalador fica para a Fase 9.
+- **Instalador:** só para Windows por enquanto, e sem assinatura digital (o Windows pode mostrar o aviso do SmartScreen). O `fmtv.exe` leva o Node dentro e por isso tem cerca de 95 MB, que o instalador comprime. Se a porta 5611 já estiver em uso, o Studio usa a ponte que estiver nela.
+- **Testar aparelho** mede o que dá para medir pelo ADB sem root. A memória do WebView pode ficar num processo separado, que não entra na conta.
 - **Procurar na rede** olha só a rede /24 de cada placa deste PC (porta 5555). Uma TV em outra faixa, como uma rede Wi-Fi separada do roteador, não aparece; conectar por IP também não alcança.
 - O teste ponta a ponta roda no Chrome; o app desktop usa o WebView2, que é do mesmo motor, mas não tem teste automático próprio.
 - **Contraste:** é medido no texto, nos botões e no relógio que o layout desenha. Os widgets do launcher e os pôsteres dos carrosséis ficam de fora. Uma sombra no texto sobre uma foto conta como suficiente, sem medir a força da sombra.

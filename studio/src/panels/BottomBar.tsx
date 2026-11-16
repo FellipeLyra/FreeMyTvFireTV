@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { perfAudit } from '../model/perf';
 import { useEditor, selectRoot } from '../store/editor';
 import * as T from '../model/tree';
 import { I } from '../ui/icons';
@@ -13,12 +14,16 @@ export function BottomBar() {
     const selection = useEditor((s) => s.selection);
     const [open, setOpen] = useState(false);
     const root = useEditor(selectRoot);
+    const layout = useEditor((s) => s.project.layout);
+    const perf = useMemo(() => perfAudit(layout), [layout]);
     const issues = [
         ...renderErrors.map((m) => ({ kind: 'error' as const, path: '', message: 'canvas: ' + m })),
         ...v.errors.map((e) => ({ kind: 'error' as const, ...e })),
         ...v.warnings.map((e) => ({ kind: 'warning' as const, ...e })),
         // Accessibility alerts never block exporting: they point at what is hard to use from the sofa.
         ...a11y.map((a) => ({ kind: 'a11y' as const, path: a.nodeId ? `pages.${page} <${a.nodeId}>` : '', message: a.message, rule: a.rule })),
+        // Performance alerts: what makes the layout slow on a 1 GB Fire TV. They never block exporting either.
+        ...perf.map((a) => ({ kind: 'perf' as const, path: a.nodeId ? `pages.${a.page} <${a.nodeId}>` : '', message: a.message, rule: a.rule })),
     ];
     const nErr = v.errors.length + renderErrors.length;
     const crumbs = selection.length === 1 ? T.pathTo(root, selection[0]).map((id) => T.find(root, id)!.node) : [];
@@ -41,10 +46,10 @@ export function BottomBar() {
                     {!issues.length && <div className="problem ok"><I.Check size={14} /> Nenhum problema. O layout pode ser exportado.</div>}
                     {issues.map((p, i) => (
                         <button key={i} className={'problem ' + p.kind} onClick={() => goto(p.path)}>
-                            {p.kind === 'error' ? <I.Error size={14} /> : p.kind === 'a11y' ? <I.Access size={14} /> : <I.Warning size={14} />}
+                            {p.kind === 'error' ? <I.Error size={14} /> : p.kind === 'a11y' ? <I.Access size={14} /> : p.kind === 'perf' ? <I.Bolt size={14} /> : <I.Warning size={14} />}
                             <span className="problem-msg">{p.message}</span>
-                            {p.kind === 'a11y' && <code>{RULE_LABEL[(p as { rule: string }).rule]}</code>}
-                            {p.path && p.kind !== 'a11y' && <code>{p.path.replace(/^pages\.home\.root/, 'tela').replace(/\.children\[\d+\]/g, ' ›').slice(0, 120)}</code>}
+                            {(p.kind === 'a11y' || p.kind === 'perf') && <code>{RULE_LABEL[(p as { rule: string }).rule]}</code>}
+                            {p.path && p.kind !== 'a11y' && p.kind !== 'perf' && <code>{p.path.replace(/^pages\.home\.root/, 'tela').replace(/\.children\[\d+\]/g, ' ›').slice(0, 120)}</code>}
                         </button>
                     ))}
                 </div>
@@ -57,6 +62,10 @@ export function BottomBar() {
                 <button className={'status-btn' + (a11y.length ? ' a11y' : ' ok')} onClick={() => setOpen(!open)} data-testid="a11y-status"
                     title="Alertas de acessibilidade: foco, contraste, tamanho do texto, área segura e resolução. Não impedem exportar.">
                     <I.Access size={14} /> {a11y.length ? `${a11y.length} alerta(s) de acessibilidade` : 'Acessibilidade ok'}
+                </button>
+                <button className={'status-btn' + (perf.length ? ' perf' : ' ok')} onClick={() => setOpen(!open)} data-testid="perf-status"
+                    title="Alertas de desempenho em aparelhos fracos (1 GB): imagens grandes demais, muitos desfoques, pacote pesado. Não impedem exportar.">
+                    <I.Bolt size={14} /> {perf.length ? `${perf.length} alerta(s) de desempenho` : 'Desempenho ok'}
                 </button>
                 <nav className="crumbs" aria-label="Caminho do elemento">
                     {crumbs.map((n, i) => (
@@ -74,6 +83,7 @@ export function BottomBar() {
 
 const RULE_LABEL: Record<string, string> = {
     unreachable: 'foco', contrast: 'contraste', 'text-size': 'tamanho do texto', 'safe-area': 'área segura', resolution: 'resolução',
+    'image-size': 'imagem grande', 'image-memory': 'memória', blur: 'desfoque', package: 'tamanho do pacote',
 };
 
 /** On-screen remote for the preview mode; the keyboard arrows work too. */

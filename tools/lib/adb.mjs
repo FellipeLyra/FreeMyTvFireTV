@@ -5,7 +5,7 @@
 // keeps serving while a package is being pushed.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 
 export const PKG = 'io.github.fellipelyra.freemytv';
@@ -26,6 +26,8 @@ export function findAdb() {
     const exe = process.platform === 'win32' ? 'adb.exe' : 'adb';
     const candidates = [
         process.env.ADB,
+        // The desktop Studio's bundled fmtv.exe keeps adb in an "adb" folder next to it.
+        join(dirname(process.execPath), 'adb', exe),
         process.env.ANDROID_HOME && join(process.env.ANDROID_HOME, 'platform-tools', exe),
         process.env.ANDROID_SDK_ROOT && join(process.env.ANDROID_SDK_ROOT, 'platform-tools', exe),
         join(homedir(), 'android-build-tools', 'sdk', 'platform-tools', exe),

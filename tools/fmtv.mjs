@@ -11,6 +11,8 @@
 //   node tools/fmtv.mjs status   [--device IP|SERIAL]
 //   node tools/fmtv.mjs log      [--device IP|SERIAL]
 //   node tools/fmtv.mjs serve    [--port 5611]   (ponte para o Studio publicar)
+//   node tools/fmtv.mjs check    [--device IP|SERIAL] [--apk app.apk] [--no-publish] [--report teste.md]
+//                                (testa o aparelho: abertura, memória, fluidez, publicação)
 //
 // `--assets` defaults to "<layout name>-assets" next to the layout file.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -18,6 +20,24 @@ import { dirname, join, basename, resolve } from 'node:path';
 import { prepare, buildPackage, unzip, engine } from './lib/package.mjs';
 import { Adb, AdbError } from './lib/adb.mjs';
 import { serve } from './lib/bridge.mjs';
+import { runCheck, formatReport, summary } from './lib/check.mjs';
+
+const HELP = `Free My TV: layouts e publicação no Fire TV
+
+  fmtv validate <layout.json> [--assets DIR]
+  fmtv pack     <layout.json> [--assets DIR] [-o out.fmtv]
+  fmtv inspect  <package.fmtv>
+  fmtv devices
+  fmtv publish  <layout.json|package.fmtv> [--assets DIR] [--device IP|SERIAL]
+  fmtv rollback [--device IP|SERIAL]
+  fmtv reset    [--device IP|SERIAL]
+  fmtv status   [--device IP|SERIAL]
+  fmtv log      [--device IP|SERIAL]
+  fmtv check    [--device IP|SERIAL] [--apk app.apk] [--no-publish] [--report teste.md]
+                testa o aparelho: abertura, memória, fluidez da navegação e publicação
+  fmtv serve    [--port 5611]   ponte para o Studio publicar pelo ADB
+
+--assets: por padrão, a pasta "<nome do layout>-assets" ao lado do arquivo.`;
 
 function parseArgs(argv) {
     const args = { _: [] };
@@ -28,6 +48,10 @@ function parseArgs(argv) {
         else if (a === '--device') args.device = argv[++i];
         else if (a === '--json') args.json = true;
         else if (a === '--port') args.port = Number(argv[++i]);
+        else if (a === '--apk') args.apk = argv[++i];
+        else if (a === '--report') args.report = argv[++i];
+        else if (a === '--no-publish') args.noPublish = true;
+        else if (a === '--exit-with-stdin') args.exitWithStdin = true;
         else args._.push(a);
     }
     return args;
@@ -47,7 +71,7 @@ function load(layoutPath, assets) {
     return { layout, files, validation };
 }
 
-async function connectDevice(args, log) {
+async function connectDevice(args, log, { requireApp = true } = {}) {
     const adb = new Adb({ log });
     let serial = args.device || null;
     if (serial && /^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(serial)) {
@@ -56,6 +80,7 @@ async function connectDevice(args, log) {
     }
     const d = await adb.select(serial);
     log(`dispositivo: ${d.serial}${d.model ? ' (' + d.model + ')' : ''}`);
+    if (!requireApp) return adb;
     const v = await adb.appVersion();
     log(`Free My TV ${v.versionName} instalado`);
     return adb;
@@ -153,14 +178,33 @@ async function main() {
             console.log(lines.length ? lines.join('\n') : 'histórico vazio (nenhum layout publicado ainda)');
             break;
         }
+        case 'check': {
+            if (args.apk && !existsSync(args.apk)) throw new Error(`APK não encontrado: ${args.apk}`);
+            const adb = await connectDevice(args, log, { requireApp: false });
+            const r = await runCheck(adb, { apk: args.apk ? resolve(args.apk) : null, publish: !args.noPublish, log: (m) => console.log('  ' + m) });
+            const md = formatReport(r);
+            if (args.json) console.log(JSON.stringify(r, null, 2));
+            if (args.report) { writeFileSync(args.report, md); console.log(`✓ relatório em ${args.report} (pronto para colar numa issue)`); }
+            const n = summary(r);
+            console.log(n.fail ? `✗ ${n.fail} problema(s), ${n.warn} aviso(s)` : n.warn ? `! tudo funcionou, com ${n.warn} aviso(s)` : '✓ tudo certo neste aparelho');
+            process.exitCode = n.fail ? 1 : 0;
+            break;
+        }
         case 'serve': {
             const port = args.port || 5611;
-            await serve(port);
+            const server = await serve(port);
             console.log(`✓ ponte do Studio em http://127.0.0.1:${port} (Ctrl+C encerra). Só aceita pedidos do próprio Studio.`);
+            // Started by the desktop Studio: stop together with it, even if it crashes.
+            if (args.exitWithStdin) {
+                const stop = () => { server.close(); process.exit(0); };
+                process.stdin.on('end', stop);
+                process.stdin.on('close', stop);
+                process.stdin.resume();
+            }
             return;
         }
         default:
-            console.log(readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 15).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+            console.log(HELP);
             process.exitCode = cmd ? 1 : 0;
     }
 }

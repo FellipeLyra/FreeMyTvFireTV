@@ -164,3 +164,14 @@ test('rollback, reset and the TV\'s own history', async () => {
     assert.match(text, /falhou: simulação/);
     assert.match(text, /layout desativado/);
 });
+
+test('tests the device for the Studio, streaming progress and a report', async () => {
+    const r = await call('POST', 'check', { body: { serial: SERIAL, publish: false } });
+    assert.equal(r.status, 200);
+    assert.ok(r.lines.some((l) => l.type === 'log' && /movendo o foco/.test(l.message)));
+    const res = r.lines.find((l) => l.type === 'result').result;
+    assert.ok(res.items.some((i) => i.id === 'memory' && i.status === 'ok'));
+    assert.match(res.markdown, /Teste do Free My TV no aparelho/);
+    const none = await call('POST', 'check', { body: {} });
+    assert.equal(none.lines.find((l) => l.type === 'error').message, 'escolha um aparelho');
+});
