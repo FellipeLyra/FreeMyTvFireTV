@@ -413,6 +413,95 @@ try {
         const shotF = await send('Page.captureScreenshot', { format: 'png' });
         writeFileSync(SHOT.replace(/\.png$/, '-focus.png'), Buffer.from(shotF.data, 'base64'));
     }
+
+    // Phase 7: publishing over ADB, against the pretend Fire TV of `npm run dev:fake-tv`.
+    const hi = await evaluate(`fetch('/api/fmtv/hello', { headers: { 'x-fmtv-studio': '1' } }).then(r => r.json()).catch(() => null)`);
+    if (!hi || !hi.simulated) {
+        console.log('\n[Studio e2e: publicação] pulado: rode o Studio com "npm run dev:fake-tv" para testar com o Fire TV simulado');
+    } else {
+        console.log('\n[Studio e2e: publicação no Fire TV simulado]');
+        const click = async (sel) => {
+            const p = await evaluate(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+            if (!p) throw new Error('não encontrado: ' + sel);
+            await mouse('mouseMoved', p.x, p.y, 0); await mouse('mousePressed', p.x, p.y); await mouse('mouseReleased', p.x, p.y, 0);
+            await sleep(300);
+        };
+        const D = '__fmtvDevices.getState()';
+        const jobDone = (ms = 20000) => waitFor(`${D}.job && ${D}.job.done`, ms);
+        const card = (serial) => `document.querySelector('.dev-item[data-serial="${serial}"]')`;
+        const FAKE = 'G070VM2011FAKE';
+        await evaluate(`${S}.load(${S}.project, 'x'); __fmtvStudio.setState({ dirty: false }); localStorage.removeItem('fmtv.studio.devices')`);
+        // Start from one pretend TV: drop network TVs left connected by an earlier run.
+        await evaluate(`(async () => { const h = { 'x-fmtv-studio': '1', 'content-type': 'application/json' };
+            const { devices } = await (await fetch('/api/fmtv/devices', { headers: h })).json();
+            for (const d of devices) if (d.network) await fetch('/api/fmtv/disconnect', { method: 'POST', headers: h, body: JSON.stringify({ serial: d.serial }) }); })()`);
+        await send('Page.navigate', { url: `${BASE}/?template=cinema` });
+        await waitFor(`window.__fmtvStudio && ${S}.project.layout.name === 'Cinema' && !!${S}.rects['big-clock']`);
+        await waitFor(`window.__fmtvDevices && ${D}.devices.length > 0`);
+        check('o aparelho único e pronto já vem escolhido; o nome aparece na barra', (await evaluate(`${D}.selected`)) === FAKE
+            && /Fire TV Stick 4K Max \(AFTKA\)/.test(await evaluate(`document.querySelector('[data-testid=devices-btn]').textContent`)));
+
+        await click('[data-testid=publish-btn]');
+        await waitFor(`!!document.querySelector('[data-testid=devices-dialog]')`);
+        await jobDone();
+        const job1 = await evaluate(`${D}.job`);
+        check('Publicar envia o Cinema, com o progresso, e a TV confirma', job1.ok && /confirmado na TV/.test(job1.message)
+            && job1.logs.some((l) => /pacote pronto/.test(l)) && job1.logs.some((l) => /enviando/.test(l)), JSON.stringify(job1));
+        await waitFor(`/Na TV: Cinema confirmado/.test(${card(FAKE)}.textContent)`, 8000).catch(() => {});
+        check('o cartão do aparelho mostra o layout confirmado', /Na TV: Cinema confirmado/.test(await evaluate(`${card(FAKE)}.textContent`)));
+
+        // The pretend TV fails to draw a layout whose name says so: the TV rolls back by itself.
+        await evaluate(`${S}.commit('nome', p => { p.layout.name = 'Teste falha-na-tv'; })`);
+        await click('[data-testid=publish-here]');
+        await jobDone();
+        const job2 = await evaluate(`${D}.job`);
+        check('layout que falha na TV: o Studio mostra o motivo e que a TV voltou ao anterior', !job2.ok && /falhou na TV/.test(job2.message) && /layout anterior/.test(job2.message), JSON.stringify(job2));
+        await sleep(800);
+        check('a TV continua com o Cinema', /Na TV: Cinema confirmado/.test(await evaluate(`${card(FAKE)}.textContent`)));
+
+        await click(`.dev-item[data-serial="${FAKE}"] .dev-actions .btn:nth-of-type(3)`); // Tela original
+        await jobDone();
+        await sleep(800);
+        const afterReset = await evaluate(`${card(FAKE)}.textContent`);
+        check('"Tela original" desliga o layout e guarda o Cinema como anterior', /Na TV: tela original/.test(afterReset) && /Anterior: Cinema/.test(afterReset), afterReset);
+        await click(`.dev-item[data-serial="${FAKE}"] .dev-actions .btn:nth-of-type(2)`); // Voltar ao anterior
+        await jobDone();
+        await sleep(800);
+        check('"Voltar ao anterior" traz o Cinema de volta', /Na TV: Cinema confirmado/.test(await evaluate(`${card(FAKE)}.textContent`)));
+
+        await click(`.dev-item[data-serial="${FAKE}"] .dev-actions .btn:nth-of-type(4)`); // Histórico da TV
+        await waitFor(`!!document.querySelector('[data-testid=device-log]') && /importado/.test(document.querySelector('[data-testid=device-log]').textContent)`, 8000).catch(() => {});
+        const tvLog = await evaluate(`(document.querySelector('[data-testid=device-log]') || {}).textContent || ''`);
+        check('histórico da própria TV: importações, falha e rollbacks', /importado cinema/.test(tvLog) && /falhou/.test(tvLog) && /desativado/.test(tvLog), tvLog.slice(0, 300));
+
+        // Connect a second TV by IP, typing like a person.
+        await click('[data-testid=device-address]');
+        await send('Input.insertText', { text: '192.168.0.50' });
+        await click('.dev-add .btn.primary');
+        await jobDone();
+        await waitFor(`!!${card('192.168.0.50:5555')}`, 8000).catch(() => {});
+        check('conectar por IP adiciona o aparelho e passa a usá-lo', (await evaluate(`!!${card('192.168.0.50:5555')}`)) && (await evaluate(`${D}.selected`)) === '192.168.0.50:5555');
+        await click('[data-testid=device-address]');
+        await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65, commands: ['selectAll'] });
+        await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+        await send('Input.insertText', { text: '192.168.0.77' });
+        await click('.dev-add .btn.primary');
+        await jobDone();
+        await sleep(500);
+        check('TV que ainda não autorizou: o Studio explica o que fazer', /autoriza/.test(await evaluate(`${card('192.168.0.77:5555')}.textContent`))
+            && /Permitir depuração/.test(await evaluate(`${D}.job.message`)));
+        check('IPs usados ficam lembrados', JSON.stringify(await evaluate(`${D}.addresses`)) === '["192.168.0.77","192.168.0.50"]', JSON.stringify(await evaluate(`${D}.addresses`)));
+        const hist = await evaluate(`${D}.history.map(h => h.op + ':' + h.ok)`);
+        check('histórico deste PC registra publicações e comandos', hist.length === 4 && hist.includes('publish:true') && hist.includes('publish:false'), JSON.stringify(hist));
+        if (SHOT) {
+            await evaluate(`document.querySelector('.dlg-body').scrollTop = 0`);
+            await sleep(300);
+            const shotD = await send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(SHOT.replace(/\.png$/, '-devices.png'), Buffer.from(shotD.data, 'base64'));
+        }
+        await key('Escape', 'Escape', 0, 27);
+        check('Esc fecha a janela de dispositivos', !(await evaluate(`!!document.querySelector('[data-testid=devices-dialog]')`)));
+    }
 } catch (e) {
     check('execução', false, e.stack || String(e));
 } finally {

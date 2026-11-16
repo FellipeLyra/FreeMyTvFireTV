@@ -7,6 +7,7 @@
   "scripts": {
     "runtime": "node scripts/copy-runtime.mjs",
     "dev": "vite",
+    "dev:fake-tv": "node scripts/fake-tv.mjs",
     "build": "npm run runtime && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",

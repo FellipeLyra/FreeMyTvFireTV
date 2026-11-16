@@ -17,7 +17,8 @@ Seus apps de streaming numa prateleira de vidro, clima ao vivo que acompanha o p
 Este projeto adapta para o Fire TV o [**Free My TV for LG webOS**](https://github.com/danielthejoker18/FreeMyTvWebOS), de Daniel (licença MIT). A interface é a mesma do original. O que muda é a camada que conversa com o aparelho: no LG ela usa os serviços do webOS e aqui usa o Android, que é a base do Fire OS.
 
 > **Status:** em desenvolvimento.
-> - O APK compila e os testes automáticos passam: 25 testes do motor de layout e da CLI, os cenários do runtime no Chrome headless e, no Studio, 57 testes unitários e 60 verificações ponta a ponta no Chrome.
+> - O APK compila e os testes automáticos passam: 35 testes do motor de layout, da CLI e da ponte de publicação, os cenários do runtime no Chrome headless e, no Studio, 57 testes unitários e 73 verificações ponta a ponta no Chrome.
+> - A publicação pelo Studio foi testada com um **Fire TV simulado** (`tools/test/fake-adb.mjs`) e com o `adb` real deste PC, mas ainda não num aparelho.
 > - Nada foi testado num Fire TV de verdade ainda. As telas abaixo vêm da interface rodando no Chrome, com uma simulação dos apps instalados.
 > - Se algo não funcionar no seu aparelho, abra uma *issue* dizendo o modelo e a versão do Fire OS.
 
@@ -122,7 +123,7 @@ A tela inicial pode ser **remontada por um arquivo de layout**, sem recompilar o
 - cores e tokens, imagens de fundo, textos, botões e animações de entrada e de foco;
 - onde ficam os widgets do launcher: prateleira de apps, clima, relógio, data e filmes em alta.
 
-O formato completo está em **[docs/layouts.md](docs/layouts.md)**. Os layouts podem ser criados no **[Free My TV Studio](#%EF%B8%8F-free-my-tv-studio-editor-visual)**, o editor visual para PC, ou escritos à mão, e são publicados pela CLI.
+O formato completo está em **[docs/layouts.md](docs/layouts.md)**. Os layouts podem ser criados no **[Free My TV Studio](#%EF%B8%8F-free-my-tv-studio-editor-visual)**, o editor visual para PC, e publicados por ele mesmo, ou escritos à mão e publicados pela CLI.
 
 <table>
 <tr>
@@ -159,6 +160,8 @@ Se o layout falhar na TV, o app volta sozinho ao layout anterior e o comando mos
 | `node tools/fmtv.mjs rollback --device IP` | Volta ao layout anterior |
 | `node tools/fmtv.mjs reset --device IP` | Volta à tela original (o layout fica guardado como anterior) |
 | `node tools/fmtv.mjs status --device IP` | Mostra o layout ativo e o anterior |
+| `node tools/fmtv.mjs log --device IP` | Histórico da TV: importações, confirmações e rollbacks |
+| `node tools/fmtv.mjs serve` | Ponte para o Studio compilado publicar (veja abaixo) |
 
 As imagens de um layout ficam na pasta `<nome-do-layout>-assets/`, ao lado do `.json`. Também dá para indicar outra com `--assets`.
 
@@ -184,7 +187,7 @@ O que já funciona:
 - tema com tokens, animações, desfazer e refazer;
 - projetos com autosave e **Prévia com o controle remoto** simulado;
 - **mapa de foco** (quantos cliques até cada item e o que as setas não alcançam), **alertas de acessibilidade** (contraste, tamanho do texto, bordas cortadas pelo overscan) e **prévia por resolução** (720p, 1080p, 4K e tamanho real);
-- exportação do `.fmtv`.
+- exportação do `.fmtv` e **publicação direta no Fire TV pelo ADB**: lista de aparelhos, conexão por IP, busca na rede, envio com progresso até a TV confirmar que desenhou, voltar ao anterior, tela original e histórico.
 
 ```
 cd studio && npm install && npm run dev     # navegador: http://127.0.0.1:5610
@@ -248,6 +251,8 @@ flowchart LR
 | [`fmtv/runtime.js`](app/src/main/assets/web/fmtv/runtime.js) | Monta o layout publicado sobre a página, move os widgets reais, cuida das setas e informa sucesso ou falha ao app |
 | [`LayoutStore.kt`](app/src/main/java/io/github/fellipelyra/freemytv/LayoutStore.kt) | Importação segura dos pacotes, troca atômica, estado pendente/verificado, rollback automático, log |
 | [`tools/fmtv.mjs`](tools/fmtv.mjs) | CLI: validar, empacotar, inspecionar e publicar por ADB |
+| [`tools/lib/bridge.mjs`](tools/lib/bridge.mjs) | Ponte local entre o Studio e o `adb`: só operações fixas, só pedidos do próprio Studio |
+| [`tools/test/fake-adb.mjs`](tools/test/fake-adb.mjs) | Fire TV simulado para testar a publicação sem aparelho (imita o `LayoutStore.kt`) |
 | [`scripts/sync_web.py`](scripts/sync_web.py) | Copia a interface do projeto original e aplica as mudanças para o Fire TV (mantém `fmtv/` e `firetv-bridge.js`) |
 
 ### Publicando um layout
@@ -350,7 +355,7 @@ Cada mudança do script precisa encontrar exatamente o trecho esperado. Se o pro
 ### Testes
 
 ```
-node --test tools/test/          # motor de layout e formato do pacote (25 testes)
+node --test tools/test/          # motor de layout, pacote e ponte de publicação (35 testes)
 node tools/browser-test.mjs      # runtime no Chrome headless (precisa do Chrome ou Edge)
 ```
 
@@ -377,8 +382,8 @@ O objetivo é um editor visual para PC (no estilo de ferramentas de design de in
 | 4. Biblioteca de blocos | Carrossel, grade, banner, clima completo, ícones, blocos prontos e blocos do usuário; auto layout no estilo do Figma | ✅ Feito. Os blocos usam os serviços do launcher (TMDB/TVMaze, Open-Meteo, apps do Android) |
 | 5. Todas as telas | Clima, Personalizar, protetor de tela e mensagens no runtime e no Studio | ✅ Feito. As funções seguem as do launcher, as partes obrigatórias são protegidas e tudo volta ao original sem o layout. Detalhes, confirmações e carregamento não existem no launcher e não foram inventados |
 | 6. Prévia e controle virtual | Prévia no Studio usando o próprio runtime, simulador de controle remoto, mapa de foco, alertas de acessibilidade e resoluções 720p/4K | ✅ Feito. O mapa usa a mesma regra de navegação da TV; contraste e tamanho são medidos no runtime |
-| 7. Publicação ADB no Studio | Descoberta de aparelhos, envio, rollback e histórico pelo editor (a base já está em `tools/lib/adb.mjs`) | 🟡 Próxima |
-| 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | ⏳ |
+| 7. Publicação ADB no Studio | Descoberta de aparelhos, envio, rollback e histórico pelo editor | ✅ Feito. Ponte local (`tools/lib/bridge.mjs`) sobre a mesma biblioteca da CLI; testada com um Fire TV simulado. **Falta validar num Fire TV** |
+| 8. Publicação pela internet | Backend com pareamento por código, tokens por aparelho e distribuição por HTTPS | 🟡 Próxima |
 | 9. Refinamento | Desempenho em aparelhos fracos, testes no aparelho, instalador do Studio | ⏳ |
 
 ## ⚠️ Limitações

@@ -5,6 +5,8 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
 // @ts-expect-error plain ESM helper without types
 import { WEB_DIR, previewHtml } from './scripts/copy-runtime.mjs';
+// @ts-expect-error plain ESM helper without types
+import { createBridge } from '../tools/lib/bridge.mjs';
 
 const TYPES: Record<string, string> = {
     '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -39,8 +41,20 @@ function liveRuntime(): Plugin {
     };
 }
 
+/**
+ * Phase 7: the local bridge to adb (tools/lib/bridge.mjs) lives inside the Studio's own
+ * server, so `npm run dev` and `npm run desktop` can publish with nothing else running.
+ */
+function deviceBridge(): Plugin {
+    return {
+        name: 'fmtv-device-bridge',
+        configureServer(server) { server.middlewares.use(createBridge()); },
+        configurePreviewServer(server) { server.middlewares.use(createBridge()); },
+    };
+}
+
 export default defineConfig({
-    plugins: [react(), liveRuntime()],
+    plugins: [react(), liveRuntime(), deviceBridge()],
     // The Studio reuses the launcher's own engine and example layouts from the repository.
     // src-tauri/target holds Rust build output (locked .exe files on Windows): never watch it.
     server: { fs: { allow: ['..'] }, host: '127.0.0.1', port: 5610, strictPort: false, watch: { ignored: ['**/src-tauri/**'] } },

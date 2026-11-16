@@ -9,6 +9,8 @@ import { readAutosave, writeAutosave } from './lib/storage';
 import { I } from './ui/icons';
 import type { Project } from './model/types';
 import { TEMPLATES } from './model/project';
+import { DevicesDialog } from './panels/Devices';
+import { useDevices } from './store/devices';
 
 export function App() {
     const mode = useEditor((s) => s.mode);
@@ -34,6 +36,9 @@ export function App() {
         readAutosave().then((r) => { if (r) setRecover(r); });
     }, []);
 
+    // Look for the bridge and the TVs quietly, so the top bar can show the chosen one.
+    useEffect(() => { useDevices.getState().refresh(); }, []);
+
     // Autosave a second after the last change.
     useEffect(() => {
         let t: ReturnType<typeof setTimeout> | null = null;
@@ -53,6 +58,7 @@ export function App() {
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
+            if (useDevices.getState().open) return;
             const s = useEditor.getState();
             const mod = e.ctrlKey || e.metaKey;
             if (s.mode === 'preview') {
@@ -111,6 +117,7 @@ export function App() {
                 <Properties />
             </div>
             <BottomBar />
+            <DevicesDialog />
             {recover && (
                 <div className="banner" role="alert">
                     <I.Warning size={16} />

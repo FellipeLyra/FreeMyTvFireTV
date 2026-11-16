@@ -7,6 +7,7 @@ import { TEMPLATES } from './model/project';
 import { openProject, saveProject, download, clearAutosave } from './lib/storage';
 import { buildPackage, finalizeLayout } from './lib/pack';
 import { TV_RES, type TvRes } from './model/a11y';
+import { useDevices, isReady } from './store/devices';
 
 export async function doSave(saveAs = false) {
     const s = useEditor.getState();
@@ -48,6 +49,8 @@ export function TopBar() {
     const showFocusMap = useEditor((s) => s.showFocusMap);
     const tvRes = useEditor((s) => s.tvRes);
     const s = useEditor.getState();
+    const device = useDevices((d) => d.devices.find((x) => x.serial === d.selected) || null);
+    const publishing = useDevices((d) => !!d.job && d.job.op === 'publish' && !d.job.done);
     const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
 
     const newFrom = (id: string) => async () => {
@@ -129,13 +132,18 @@ export function TopBar() {
                     title="Prévia com navegação pelo controle (P)">
                     {mode === 'edit' ? <><I.Play size={14} /> Prévia</> : <><I.Edit size={14} /> Editar</>}
                 </button>
-                <button className="tb-btn" disabled title="Gerenciar dispositivos: Fase 7 do roadmap"><I.Tv size={14} /> Dispositivo</button>
+                <button className="tb-btn" data-testid="devices-btn" onClick={() => useDevices.getState().setOpen(true)}
+                    title={device ? `${device.label} (${device.serial}): trocar de aparelho, voltar ao layout anterior, histórico` : 'Conectar um Fire TV pelo ADB'}>
+                    <I.Tv size={14} /> <span className="tb-device">{device ? device.label : 'Dispositivo'}</span>
+                    {device && <span className={'dot-state ' + (isReady(device) ? 'ok' : 'warn')} />}
+                </button>
                 <button className="tb-btn" onClick={(e) => open(e, [
                     { label: 'Pacote para a TV (.fmtv)', action: exportPackage },
                     { label: 'Layout (layout.json)', action: exportJson },
                 ])}><I.Export size={14} /> Exportar</button>
-                <button className="tb-btn primary" disabled title="Publicação direta pelo Studio: Fases 7 (ADB) e 8 (internet). Por enquanto exporte o .fmtv e use a CLI.">
-                    <I.Send size={14} /> Publicar
+                <button className="tb-btn primary" data-testid="publish-btn" disabled={publishing} onClick={() => useDevices.getState().publish()}
+                    title={device && isReady(device) ? `Publicar na TV ${device.label}: envia, aplica e espera a TV confirmar que desenhou` : 'Escolha um Fire TV para publicar'}>
+                    <I.Send size={14} /> {publishing ? 'Publicando…' : 'Publicar'}
                 </button>
             </div>
             {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}

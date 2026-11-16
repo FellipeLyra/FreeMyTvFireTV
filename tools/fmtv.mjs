@@ -9,12 +9,15 @@
 //   node tools/fmtv.mjs rollback [--device IP|SERIAL]
 //   node tools/fmtv.mjs reset    [--device IP|SERIAL]
 //   node tools/fmtv.mjs status   [--device IP|SERIAL]
+//   node tools/fmtv.mjs log      [--device IP|SERIAL]
+//   node tools/fmtv.mjs serve    [--port 5611]   (ponte para o Studio publicar)
 //
 // `--assets` defaults to "<layout name>-assets" next to the layout file.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, basename, resolve } from 'node:path';
 import { prepare, buildPackage, unzip, engine } from './lib/package.mjs';
 import { Adb, AdbError } from './lib/adb.mjs';
+import { serve } from './lib/bridge.mjs';
 
 function parseArgs(argv) {
     const args = { _: [] };
@@ -24,6 +27,7 @@ function parseArgs(argv) {
         else if (a === '-o' || a === '--out') args.out = argv[++i];
         else if (a === '--device') args.device = argv[++i];
         else if (a === '--json') args.json = true;
+        else if (a === '--port') args.port = Number(argv[++i]);
         else args._.push(a);
     }
     return args;
@@ -43,16 +47,16 @@ function load(layoutPath, assets) {
     return { layout, files, validation };
 }
 
-function connectDevice(args, log) {
+async function connectDevice(args, log) {
     const adb = new Adb({ log });
     let serial = args.device || null;
     if (serial && /^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(serial)) {
         log(`conectando em ${serial}…`);
-        serial = adb.connect(serial);
+        serial = await adb.connect(serial);
     }
-    const d = adb.select(serial);
+    const d = await adb.select(serial);
     log(`dispositivo: ${d.serial}${d.model ? ' (' + d.model + ')' : ''}`);
-    const v = adb.appVersion();
+    const v = await adb.appVersion();
     log(`Free My TV ${v.versionName} instalado`);
     return adb;
 }
@@ -97,7 +101,7 @@ async function main() {
             break;
         }
         case 'devices': {
-            const list = new Adb().devices();
+            const list = await new Adb().devices();
             if (!list.length) console.log('nenhum dispositivo');
             for (const d of list) console.log(`  ${d.serial}  ${d.state}  ${d.model}`);
             break;
@@ -118,7 +122,7 @@ async function main() {
                 if (!validation.ok) { console.log('✗ layout inválido; nada foi enviado'); process.exitCode = 1; break; }
                 bytes = buildPackage(layout, files);
             }
-            const adb = connectDevice(args, log);
+            const adb = await connectDevice(args, log);
             const r = await adb.publish(bytes);
             if (r.ok) console.log(`✓ layout aplicado e confirmado na TV (${r.id || r.status?.id})`);
             else {
@@ -130,7 +134,7 @@ async function main() {
         }
         case 'rollback':
         case 'reset': {
-            const adb = connectDevice(args, log);
+            const adb = await connectDevice(args, log);
             const r = await adb.command(cmd);
             if (!r) { console.log('✗ sem resposta da TV'); process.exitCode = 1; break; }
             console.log(cmd === 'reset' ? '✓ tela original restaurada (o layout fica guardado como anterior)'
@@ -138,13 +142,25 @@ async function main() {
             break;
         }
         case 'status': {
-            const adb = connectDevice(args, log);
-            const r = adb.readResult();
+            const adb = await connectDevice(args, log);
+            const r = await adb.readResult();
             console.log(r ? JSON.stringify(r.status, null, 2) : 'sem informações (nenhum layout publicado ainda)');
             break;
         }
+        case 'log': {
+            const adb = await connectDevice(args, log);
+            const lines = await adb.readLog();
+            console.log(lines.length ? lines.join('\n') : 'histórico vazio (nenhum layout publicado ainda)');
+            break;
+        }
+        case 'serve': {
+            const port = args.port || 5611;
+            await serve(port);
+            console.log(`✓ ponte do Studio em http://127.0.0.1:${port} (Ctrl+C encerra). Só aceita pedidos do próprio Studio.`);
+            return;
+        }
         default:
-            console.log(readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 13).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+            console.log(readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 15).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
             process.exitCode = cmd ? 1 : 0;
     }
 }
